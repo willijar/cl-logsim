@@ -34,4 +34,5 @@
      (:file "entity" :depends-on ("simulator"))
      (:file "sources" :depends-on ("entity"))
      (:file "logic" :depends-on ("entity"))
-     (:file "monitor" :depends-on ("entity"))))
+     (:file "monitor" :depends-on ("entity"))
+     (:file "latches" :depends-on ("entity"))))

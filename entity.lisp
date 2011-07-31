@@ -102,11 +102,7 @@
   (apply #'initialize-outputs entity args))
 
 (defmethod reset((entity with-outputs))
-  (setf (signal-value (outputs entity))
-        (map 'bit-vector
-             #'(lambda(init)
-                 (if (consp init) (cdr init) 0))
-             (output-initialization entity))))
+  (initialize-outputs entity))
 
 (defclass with-inputs()
   ((inputs :type (vector input *) :reader inputs))
@@ -136,7 +132,7 @@
 
 (defgeneric calculate-output-signals(entity)
   (:documentation "Calculate and return new output signal vector
-  from (current) inputs"))
+  from (current) inputs - if nil do not change outputs"))
 
 (defgeneric delay(entity)
   (:documentation "Return the delay in updating outputs after an input
@@ -155,8 +151,9 @@
   (:method((entity with-outputs))
     "For an entity with outputs calculate new oututs and schedule update"
     (let* ((new-signals (calculate-output-signals entity))
-           (delay (delay entity))
-           (update-outputs
+           (delay (delay entity)))
+      (when new-signals
+        (let ((update-outputs
             #'(lambda()
                 (let* ((old-signals (signal-value (outputs entity)))
                        (to-alert
@@ -168,9 +165,9 @@
                              old-signals new-signals (outputs entity)))))
                   (setf (signal-value (outputs entity)) new-signals)
                   (map 'nil #'signals-changed (delete-duplicates to-alert))))))
-      (if (zerop delay)
-          (funcall update-outputs)
-          (schedule delay update-outputs)))))
+          (if (zerop delay)
+              (funcall update-outputs)
+              (schedule delay update-outputs)))))))
 
 (defgeneric connect(output input)
   (:documentation "Connect an output to an input")

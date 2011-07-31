@@ -118,7 +118,7 @@
     (flet ((iname(pfx num) (intern (format nil "~A~D" pfx num))))
       (nconc
        (mapcar #'(lambda(n) (iname #\S n)) (integer-sequence n))
-       (mapcar #'(lambda(n) (iname #\I n)) (integer-sequence (ash n 2)))))))
+       (mapcar #'(lambda(n) (iname #\I n)) (integer-sequence (ash 1 n)))))))
 
 (defmethod calculate-output-signals((m multiplexer))
   (let* ((n (slot-value m 'n))
