@@ -1,5 +1,5 @@
 ;;; LENS System definition -*- Lisp -*-
-;; Copyright (C) 2007-2010 Dr. John A.R. Williams
+;; Copyright (C) 2011 Dr. John A.R. Williams
 
 ;; Author: Dr. John A.R. Williams <J.A.R.Williams@jarw.org.uk>
 ;; Keywords:
@@ -31,4 +31,7 @@
      (:file "compatibility" :depends-on ("defpackage"))
      (:file "simulator" :depends-on
             ("defpackage" "common" "compatibility"))
-     (:file "entity" :depends-on ("simulator"))))
+     (:file "entity" :depends-on ("simulator"))
+     (:file "sources" :depends-on ("entity"))
+     (:file "logic" :depends-on ("entity"))
+     (:file "monitor" :depends-on ("entity"))))

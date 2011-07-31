@@ -18,8 +18,7 @@
 (in-package :cl-user)
 
 (defpackage :logsim
-  (:documentation "Some common declarations and interfaces for LENS")
+  (:documentation "Package class for logsim")
   (:use :cl)
   (:import-from :alg
-                #:make-binary-heap #:enqueue #:dequeue #:empty-p #:size)
-  )
+                #:make-binary-heap #:enqueue #:dequeue #:empty-p #:size))

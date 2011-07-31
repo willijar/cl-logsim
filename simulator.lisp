@@ -72,7 +72,7 @@ called after all entities created before running simulation")
   (map 'nil
        #'(lambda(e) (unless (typep e 'source) (reset e))) (entities simulator)))
 
-(defmethod start(simulator &key (granularity 10000)&allow-other-keys)
+(defmethod start(simulator &key (granularity 10000) (stop 100) &allow-other-keys)
   "Execute the simulator returning the running
 thread. granularity is the number of event to dispatch before
 yielding the thread (default 10000). If granularity is nil all events
@@ -80,16 +80,18 @@ are dispatched in current thread"
   (flet((run(simulator)
           (setf (halted simulator) nil)
           (loop
-           :with c = 1
-           :with q =  (slot-value simulator 'event-queue)
-           :while (not (or (empty-p q) (halted simulator)))
-           :for event = (dequeue q)
-           :do (progn
+             :with c = 1
+             :with q =  (slot-value simulator 'event-queue)
+             :while (not (or (empty-p q)
+                             (halted simulator)
+                             (>= (simulation-time simulator) stop)))
+             :for event = (dequeue q)
+             :do (progn
                  (setf (simulation-time simulator) (car event))
                  (funcall (cdr event)))
              :when (and granularity
                       (= (setf c (mod (1+ c) granularity)) 0))
-           :do (yield-thread))
+             :do (yield-thread))
           (format t "~%-- Simulation halted at ~,4f~%" (simulation-time simulator))
           (setf (halted simulator) t)))
     (stop simulator :abort t)
