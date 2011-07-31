@@ -166,3 +166,13 @@ Examples:
                     scale)))
       (princ arg os)))
 
+(defun integer-sequence(end &key (start 0))
+  (loop :for x :from start :below end
+     :collect x))
+
+(defun bit-vector-to-integer(bv)
+  (let ((s 0))
+    (loop :for b :across bv
+       :do (setf s (ash s 1))
+       :unless (zerop b) :do (incf s))
+    s))

@@ -84,20 +84,22 @@
   ((outputs :type (vector output *) :reader outputs))
   (:documentation "Mixin for entity with one or more outputs"))
 
-(defgeneric output-initialization(entity)
-  (:documentation "Return a list of cons of names and intitial values for outputs of an entity")
-  (:method((entity with-outputs)) '(OP)))
-
-(defmethod initialize-instance :after((entity with-outputs) &key &allow-other-keys)
-  (setf (slot-value entity 'outputs)
-        (map 'vector
-             #'(lambda(init)
+(defgeneric initialize-outputs(entity &key &allow-other-keys)
+  (:documentation "Main method should return a list of cons of names and intitial values for outputs of an entity")
+  (:method :around ((entity with-outputs) &key &allow-other-keys)
+      (setf (slot-value entity 'outputs)
+            (map 'vector
+                 #'(lambda(init)
                  (multiple-value-bind(name v)
                      (if (consp init)
                          (values (car init) (cdr init))
                          (values init 0))
                    (make-instance 'output :entity entity :name name :signal-value v)))
-             (output-initialization entity))))
+             (call-next-method))))
+  (:method((entity with-outputs) &key &allow-other-keys) '(OP)))
+
+(defmethod initialize-instance :after((entity with-outputs) &rest args &key &allow-other-keys)
+  (apply #'initialize-outputs entity args))
 
 (defmethod reset((entity with-outputs))
   (setf (signal-value (outputs entity))
@@ -110,16 +112,18 @@
   ((inputs :type (vector input *) :reader inputs))
   (:documentation "mixin for an entity with one or more inputs"))
 
-(defgeneric input-initialization(entity)
-  (:documentation "Return a list of cons of names and intitial values for outputs of an entity")
-  (:method((entity with-outputs)) '(IP)))
-
-(defmethod initialize-instance :after((entity with-inputs) &key &allow-other-keys)
-  (setf (slot-value entity 'inputs)
+(defgeneric initialize-inputs(entity &key &allow-other-keys)
+  (:documentation "Main method should return a list of cons of names and intitial values for inputs of an entity")
+  (:method :around ((entity with-inputs) &key &allow-other-keys)
+    (setf (slot-value entity 'inputs)
         (map 'vector
              #'(lambda(name)
                  (make-instance 'input :entity entity :name name))
-             (input-initialization entity))))
+             (call-next-method))))
+  (:method((entity with-inputs) &key &allow-other-keys) '(IP)))
+
+(defmethod initialize-instance :after((entity with-inputs) &rest args &key &allow-other-keys)
+  (apply #'initialize-inputs entity args))
 
 (defmethod signal-value((ip input))
   (signal-value (connection ip)))
@@ -206,3 +210,17 @@
       (error "No connection ~A on ~A" pin entity))))
 
 (set-dispatch-macro-character #\# #\{ #'con-reader)
+
+(defclass with-edge-detection()
+  ((input-signal-vector :type bit-vector))
+  (:documentation "A mixin to detect input signal edges"))
+
+(defun input-signal-vector(entity)
+  "Return 2 vectors - the input signal vector and a vector of changed inputs"
+  (let ((new (signal-value (inputs entity))))
+    (with-slots((old input-signal-vector)) entity
+      (unless (slot-boundp entity 'input-signal-vector)
+        (setf old new))
+      (prog1
+          (values new (bit-xor new old))
+        (setf old new)))))

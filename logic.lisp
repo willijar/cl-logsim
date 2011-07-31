@@ -33,11 +33,14 @@
   ()
   (:documentation "base class for all logic (entities with inputs)"))
 
+(defmethod initialize-inputs((entity logic) &key (inputs 2) &allow-other-keys)
+  (integer-sequence (if (integerp inputs) inputs (length inputs))))
+
 (defclass logic-function-gate(logic)
   ((inverted-inputs :type (vector bit *) :reader inverted-inputs))
   (:documentation "Class for all basic logic functions"))
 
-(defmethod initialize-instance :before ((g logic-function-gate)
+(defmethod initialize-instance :after ((g logic-function-gate)
                                        &key (inputs 2) &allow-other-keys)
   (setf (slot-value g 'inverted-inputs)
         (etypecase inputs
@@ -48,19 +51,13 @@
           (integer
            (make-array inputs :element-type 'bit :initial-element 0)))))
 
-(defmethod input-initialization((gate logic-function-gate))
-  (let ((c -1))
-    (map 'list
-         #'(lambda(e) (declare (ignore e)) (incf c))
-         (inverted-inputs gate))))
-
 (defmethod calculate-output-signals ((gate logic-function-gate))
   (make-array 1
               :element-type 'bit
               :initial-element
               (reduce (slot-value gate 'logic-function)
                       (bit-xor (signal-value (inputs gate))
-                               (inverted-inputs gate)))))1
+                               (inverted-inputs gate)))))
 
 (defclass and-gate(logic-function-gate)
   ((logic-function :initform #'logand :allocation :class)))
@@ -84,17 +81,50 @@
   (bit-not (signal-value (inputs gate))))
 
 (defclass truth-table-gate(logic)
-  ((input-initialization :initarg :inputs :reader input-initialization)
-   (output-initialization :initarg :outputs :reader output-initialization)
-   (truth-table :type vector :reader truth-table))
+  ((truth-table :type vector :reader truth-table))
   (:documentation "A gate represented by a truth table"))
 
-(defun bit-vector-to-integer(bv)
-  (let ((s 0))
-    (loop :for b :across bv
-       :do (setf s (ash s 1))
-       :unless (zerop b) :do (incf s))
-    s))
+(defmethod initialize-inputs((gate truth-table-gate)
+                             &key inputs &allow-other-keys)
+  inputs)
 
-(defmethod calculate-outputs((gate truth-table-gate))
+(defmethod initialize-outputs((gate truth-table-gate)
+                              &key outputs &allow-other-keys)
+  outputs)
+
+(defmethod calculate-output-signals((gate truth-table-gate))
   (aref (truth-table gate) (bit-vector-to-integer (signal-value (inputs gate)))))
+
+(defclass decoder(logic)
+  ()
+  (:documentation "Line Decoder class - takes inputs as number of address lines"))
+
+(defmethod initialize-outputs((decoder decoder) &key (inputs 2) &allow-other-keys)
+  (integer-sequence (ash 1 inputs)))
+
+(defmethod calculate-output-signals((decoder decoder))
+  (let ((op (make-array (length (outputs decoder)) :element-type 'bit
+                        :initial-element 0)))
+    (setf (aref op (bit-vector-to-integer (signal-value (inputs decoder)))) 1)
+    op))
+
+(defclass multiplexer(logic)
+  ((n :type fixnum
+      :documentation "Number of address lines in this multiplexer"))
+  (:documentation "Multiplexer - takes inputs as number of signal lines"))
+
+(defmethod initialize-inputs((m multiplexer) &key inputs &allow-other-keys)
+  (let ((n (setf (slot-value m 'n) (ceiling (log inputs 2)))))
+    (flet ((iname(pfx num) (intern (format nil "~A~D" pfx num))))
+      (nconc
+       (mapcar #'(lambda(n) (iname #\S n)) (integer-sequence n))
+       (mapcar #'(lambda(n) (iname #\I n)) (integer-sequence (ash n 2)))))))
+
+(defmethod calculate-output-signals((m multiplexer))
+  (let* ((n (slot-value m 'n))
+         (iv (signal-value (inputs m)))
+         (addr (bit-vector-to-integer (subseq iv 0 n))))
+      (make-array 1 :element-type 'bit
+                  :initial-element (aref iv (+ n addr)))))
+
+
