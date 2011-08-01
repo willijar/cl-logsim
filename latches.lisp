@@ -34,7 +34,7 @@
   (:documentation "An SR latch"))
 
 (defmethod initialize-outputs((l latch) &key &allow-other-keys)
-  '(Q QBAR))
+  '((Q . 0) (QBAR . 1)))
 
 (defclass sr-latch(latch)
   ()
@@ -65,7 +65,7 @@
       (if (zerop (aref iv 1)) #*01 #*10))))
 
 (defclass sr-master-slave(sr-latch)
-  ((control :initform 1 :reader control :initarg :control
+  ((control :initform 1 :reader control :initarg :control :type bit
             :documentation "Control level")
    (master-state :initform #*00 :type bit-vector)))
 
@@ -79,7 +79,8 @@
         ms)))
 
 (defclass d-flip-flop(latch with-edge-detection)
-  ((control :initform 1 :initarg :control :initarg :edge :reader control
+  ((control :type bit :initform 1
+            :initarg :control :initarg :edge :reader control
             :documentation "Edge triggering control - if 1 +ve, if 0 -ve")))
 
 (defmethod initialize-inputs((flip-flop d-flip-flop)&key &allow-other-keys)

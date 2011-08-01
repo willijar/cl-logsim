@@ -35,4 +35,5 @@
      (:file "sources" :depends-on ("entity"))
      (:file "logic" :depends-on ("entity"))
      (:file "monitor" :depends-on ("entity"))
-     (:file "latches" :depends-on ("entity"))))
+     (:file "latches" :depends-on ("entity"))
+     (:file "block" :depends-on ("entity"))))

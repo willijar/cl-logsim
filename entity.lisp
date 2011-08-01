@@ -32,7 +32,7 @@
 
 (defconstant high 1 "High value boolean")
 (defconstant low 0 "High value boolean")
-(defvar *default-delay* 0.05)
+(defvar *default-delay* 0)
 
 (defclass entity()
   ((lastid :allocation :class :initform 0)
@@ -75,6 +75,7 @@
                 :documentation "List of input this is connected to")
    (signal-value :initarg :signal-value
                  :type bit :accessor signal-value :initform 0)))
+
 
 (defclass input(connection)
   ((connection :type output :accessor connection :initform nil
@@ -124,11 +125,18 @@
 (defmethod signal-value((ip input))
   (signal-value (connection ip)))
 
-(defmethod signal-value((v vector))
+(defmethod signal-value((v sequence))
   (map 'bit-vector #'signal-value v))
 
-(defmethod (setf signal-value)((entity vector) (b vector))
-  (map 'bit-vector #'(setf signal-value) entity b))
+(defmethod (setf signal-value)((b vector) (entity sequence))
+  (map 'bit-vector #'(setf signal-value) b entity))
+
+(defmethod (setf signal-value)((b integer) (input input))
+  (connect b input))
+
+(defclass connector(input output)
+  ()
+  (:documentation "A connector (an alias for an input or output)"))
 
 (defgeneric calculate-output-signals(entity)
   (:documentation "Calculate and return new output signal vector
@@ -171,15 +179,14 @@
 
 (defgeneric connect(output input)
   (:documentation "Connect an output to an input")
-  (:method :before(output (input input))
-           (when (connection input) (error "~A already connected" input)))
   (:method :after(output (input input))
            (when (every #'connection (inputs (entity input)))
              (signals-changed (entity input))))
   (:method((output output) (input input))
+    (when (connection input) (error "~A already connected" input))
     (pushnew (entity input) (connections output))
     (setf (connection input) output))
-  (:method((output integer) (input input))
+  (:method ((output integer) (input input))
     (setf (connection input) output)))
 
 (defgeneric disconnect(input)
@@ -218,6 +225,5 @@
     (with-slots((old input-signal-vector)) entity
       (unless (slot-boundp entity 'input-signal-vector)
         (setf old new))
-      (prog1
-          (values new (bit-xor new old))
-        (setf old new)))))
+      (let ((changed (bit-xor new old)))
+        (values (setf old new) changed)))))

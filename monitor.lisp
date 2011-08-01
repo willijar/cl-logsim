@@ -30,11 +30,12 @@
 (in-package :logsim)
 
 (defclass monitor(entity with-inputs)
-  ((input-initialization :initarg :inputs :reader input-initialization
-                         :initform #(IP))
-   (action :initarg :action :reader action
+  ((action :initarg :action :reader action
            :documentation "Function to call when inputs have changed"))
   (:documentation "Entity to monitor signals"))
+
+(defmethod initialize-inputs((monitor entity) &key traces &allow-other-keys)
+  traces)
 
 (defmethod signals-changed((m monitor))
   (funcall (action m) (signal-value (inputs m))))
@@ -50,3 +51,74 @@
 
 (defmethod reset((tr trace-monitor)) (setf (data tr) nil))
 
+(defgeneric write-timing-diagram(trace format &optional stream)
+  (:documentation "Write a timing diagram to stream"))
+
+(defmethod write-timing-diagram((trace trace-monitor) (format (eql :tikz))
+                                &optional (stream *standard-output*))
+  (write-line "\begin{tikzpicture}" stream)
+  (format stream "\axis{~{~A/-~D~^,~}}~%"
+          (mapcan #'(lambda(input n) (list (name input) n))
+                  (inputs trace)
+                  (integer-sequence (length (inputs trace)))))
+  (let ((data (reverse (data trace))))
+    (dotimes(i (length (inputs trace)))
+      (labels ((b(sample) (aref (cdr sample) i))
+               (pair(sample) (list (car sample) (b sample))))
+        (format stream "(t-\d)~{+(~A,~A)~}" (pair (first data)))
+        (let ((last-sample (first data)))
+          (format stream "~{--+(~A,~A)~}~%"
+                  (mapcan #'pair
+                          (filter #'(lambda(sample)
+                                      (prog1 (= (b sample) (b last-sample))
+                                        (setf last-sample sample)))
+                                  (rest data))))))))
+  (write-line "\end{tikzpicture}" stream))
+
+
+(defgeneric truth-table(entity)
+  (:documentation "Return the truth table for entity"))
+
+(defmethod truth-table(entity)
+  (labels ((free-inputs(x)
+             (etypecase x
+               (input (unless (connection x) (list x)))
+               (with-inputs (free-inputs (coerce (inputs x) 'list)))
+               (list (mapcan #'free-inputs x))))
+           (free-outputs(x)
+             (etypecase x
+               (output (when (or (not (connections x))
+                                 (and (listp entity)
+                                      (set-difference (connections x) entity)))
+                         (list x)))
+               (with-outputs (free-outputs (coerce (outputs x) 'list)))
+               (list (mapcan #'free-outputs x)))))
+    (let* ((inputs (free-inputs entity))
+           (outputs (free-outputs entity))
+           (n (length inputs))
+           (op
+            (map 'vector
+            #'(lambda(input-values)
+                (setf (signal-value inputs) input-values)
+                (cons input-values (signal-value outputs)))
+            (mapcar #'(lambda(i) (integer-to-bit-vector i n))
+                    (integer-sequence (ash 1 n))))))
+      (map 'nil #'disconnect inputs)
+      (values op
+              (cons inputs outputs)))))
+
+(defgeneric write-truth-table(trace format &optional stream)
+  (:documentation "Write a timing diagram to stream"))
+
+(defmethod write-truth-table(entity (format (eql :tikz))
+                             &optional (stream *standard-output*))
+  (multiple-value-bind(data columns) (truth-table entity)
+    (format stream "\\begin{tabular}{~{~*c~}|~{~*c~}}~%" (car columns) (cdr columns))
+    (format stream "\\multicolumn{~D}{c|}{Inputs} & \\multicolumn{~D}{c}{Outputs} \\\\~%" (length (car columns)) (length (cdr columns)))
+    (format stream "~{~A &~}~{~A~^ &~}\\\\\\hline~%"
+            (mapcar #'name (car columns)) (mapcar #'name (cdr columns)))
+    (loop :for row :across data
+       :do (format stream "~{~A &~}~{~A~^&~}\\\\~%"
+                   (coerce (car row) 'list)
+                   (coerce (cdr row) 'list)))
+    (write-line "\\end{tabular}" stream)))

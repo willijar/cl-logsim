@@ -176,3 +176,9 @@ Examples:
        :do (setf s (ash s 1))
        :unless (zerop b) :do (incf s))
     s))
+
+(defun integer-to-bit-vector(int no-bits)
+  (let ((result (make-array no-bits :element-type 'bit)))
+    (dotimes(i no-bits)
+      (setf (aref result (- no-bits i 1)) (ldb (byte 1 i) int)))
+    result))
