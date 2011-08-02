@@ -96,13 +96,10 @@
                          (values init 0))
                    (make-instance 'output :entity entity :name name :signal-value v)))
              (call-next-method))))
-  (:method((entity with-outputs) &key &allow-other-keys) '(OP)))
+  (:method((entity with-outputs) &key outputs &allow-other-keys) outputs))
 
 (defmethod initialize-instance :after((entity with-outputs) &rest args &key &allow-other-keys)
   (apply #'initialize-outputs entity args))
-
-(defmethod reset((entity with-outputs))
-  (initialize-outputs entity))
 
 (defclass with-inputs()
   ((inputs :type (vector input *) :reader inputs))
@@ -116,7 +113,7 @@
              #'(lambda(name)
                  (make-instance 'input :entity entity :name name))
              (call-next-method))))
-  (:method((entity with-inputs) &key &allow-other-keys) '(IP)))
+  (:method((entity with-inputs) &key inputs &allow-other-keys) inputs))
 
 (defmethod initialize-instance :after((entity with-inputs) &rest args &key &allow-other-keys)
   (apply #'initialize-inputs entity args))
@@ -189,13 +186,8 @@
     (setf (connection input) output))
   (:method (output (inputs sequence))
     (map 'nil #'(lambda(input) (connect output input)) inputs))
-  (:method ((outputs sequence) (entity with-inputs))
-    (connect outputs (inputs entity)))
   (:method ((outputs sequence) (inputs sequence))
-    (map 'nil #'connect outputs inputs))
-  (:method ((entity with-outputs) input)
-    (connect (outputs entity) input)))
-
+    (map 'nil #'connect outputs inputs)))
 
 (defgeneric disconnect(input)
   (:documentation "Disconnect an input")

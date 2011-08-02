@@ -60,6 +60,7 @@
       (unless (= no-state-bits (length (initial-state-vector fsm)))
         (error "Malformed Initial State vector: length is not ~D" no-state-bits))
       (setf initial-state-vector (caar state-table)))
+   (setf (state fsm) initial-state-vector)
    (setf transitions (make-array (ash 1 no-state-bits) :initial-element nil))
   (dolist(row state-table)
     (let ((i (bit-vector-to-integer (car row))))

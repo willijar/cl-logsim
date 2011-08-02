@@ -45,7 +45,12 @@
     (setf (slot-value m 'inputs)
           (concatenate 'vector (inputs m)
                        (list input)))
-    (connect output input)))
+    (connect output input))
+  (reset m)
+  (signals-changed m))
+
+(defmethod connect((outputs sequence) (monitor monitor))
+  (map 'nil #'(lambda(input) (connect input monitor)) outputs))
 
 (defclass trace-monitor(monitor)
   ((data :initform nil :type list :accessor data
@@ -63,24 +68,28 @@
 
 (defmethod write-timing-diagram((trace trace-monitor) (format (eql :tikz))
                                 &optional (stream *standard-output*))
-  (write-line "\begin{tikzpicture}" stream)
-  (format stream "\axis{~{~A/-~D~^,~}}~%"
+  (write-line "\\begin{tikzpicture}" stream)
+  (let ((endtime (ceiling (car (first (data trace))))))
+  (format stream "\\axis{~{~A/-~D~^,~}}{~D}~%"
           (mapcan #'(lambda(input n) (list (name input) n))
-                  (inputs trace)
-                  (integer-sequence (length (inputs trace)))))
+                  (coerce (inputs trace) 'list)
+                  (integer-sequence (length (inputs trace))))
+          endtime)
   (let ((data (reverse (data trace))))
     (dotimes(i (length (inputs trace)))
       (labels ((b(sample) (aref (cdr sample) i))
                (pair(sample) (list (car sample) (b sample))))
-        (format stream "(t-\d)~{+(~A,~A)~}" (pair (first data)))
-        (let ((last-sample (first data)))
-          (format stream "~{--+(~A,~A)~}~%"
-                  (mapcan #'pair
-                          (filter #'(lambda(sample)
-                                      (prog1 (= (b sample) (b last-sample))
-                                        (setf last-sample sample)))
-                                  (rest data))))))))
-  (write-line "\end{tikzpicture}" stream))
+        (format stream "\\draw (t-~d)+(~,2f,~A)" i (pair (first data)))
+        (let ((last-b (b (first data))))
+          (dolist(sample (rest data))
+            (let ((b (b sample))
+                  (time (car sample)))
+              (when (/= b last-b)
+                (format stream "--+(~,2f,~A)--+(~,2f,~A)"
+                        time last-b time b)
+                (setf last-b b))))
+          (format stream "--+(~,2f,~D);~%" endtime last-b))))))
+  (write-line "\\end{tikzpicture}" stream))
 
 
 (defgeneric truth-table(entity)

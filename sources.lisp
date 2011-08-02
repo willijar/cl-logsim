@@ -49,11 +49,12 @@ values. For non-periodic signals the last time period is ignored.")
                #'(lambda(s)
                    (cons
                     (car s)
-                    (if (and (= n 1) (atom (cdr s)))
+                    (if (and (= n 1) (not (typep (cdr s) 'sequence)))
                         (make-array 1 :element-type 'bit
                                     :initial-element (cdr s))
                         (coerce (cdr s) `(bit-vector ,n)))))
-               sequence))))
+               sequence)))
+  (reset s))
 
 (defmethod calculate-output-signals((s source))
   (cdr (aref (signal-sequence s) (signal-index s))))
@@ -72,12 +73,13 @@ values. For non-periodic signals the last time period is ignored.")
 (defmethod reset((s source))
   (setf (signal-index s) 0)
   (let ((v (aref (signal-sequence s) 0)))
-    (setf (signal-value (outputs s)) v)
+    (setf (signal-value (outputs s)) (cdr v))
     (schedule (car v) #'(lambda() (signals-changed s)))))
 
 (defun make-clock(&key (period *default-clk-period*) (name 'CLK))
   "Clock is just a periodic signal with one output"
   (make-instance 'source
                  :name name
-                 :sequence `((,(/ period 2) . 0) (,(/ period 2) . 1))
+                 :outputs '(CLK)
+                 :sequence `((,(/ period 2) . #*0) (,(/ period 2) . #*1))
                  :periodic t))
