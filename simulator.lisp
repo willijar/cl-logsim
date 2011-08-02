@@ -107,3 +107,15 @@ are dispatched in current thread"
 (eval-when(:load-toplevel :execute)
   (unless *simulator* (setf *simulator* (make-instance 'simulator)))
   (pushnew *simulator* *reset-hooks*))
+
+(defun start-simulation() (start *simulator*))
+(defun stop-simulation() (stop *simulator*))
+
+(defun load-example(name &key (reset t))
+  (when reset
+    (setf (entities *simulator*) nil)
+    (reset *simulator*))
+  (load (merge-pathnames (make-pathname :name name :type "lisp")
+                         #.(asdf:system-relative-pathname :logsim "/example"))
+        :verbose nil :print nil)
+  (format t "~%-- Example ~S loaded~%" name))

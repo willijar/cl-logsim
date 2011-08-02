@@ -40,6 +40,13 @@
 (defmethod signals-changed((m monitor))
   (funcall (action m) (signal-value (inputs m))))
 
+(defmethod connect((output output) (m monitor))
+  (let ((input (make-instance 'input :entity m :name (name output))))
+    (setf (slot-value m 'inputs)
+          (concatenate 'vector (inputs m)
+                       (list input)))
+    (connect output input)))
+
 (defclass trace-monitor(monitor)
   ((data :initform nil :type list :accessor data
          :documentation "List of trace data for this signal")))

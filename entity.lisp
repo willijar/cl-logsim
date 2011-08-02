@@ -76,7 +76,6 @@
    (signal-value :initarg :signal-value
                  :type bit :accessor signal-value :initform 0)))
 
-
 (defclass input(connection)
   ((connection :type output :accessor connection :initform nil
                :documentation "The output connected to this input")))
@@ -187,7 +186,16 @@
     (pushnew (entity input) (connections output))
     (setf (connection input) output))
   (:method ((output integer) (input input))
-    (setf (connection input) output)))
+    (setf (connection input) output))
+  (:method (output (inputs sequence))
+    (map 'nil #'(lambda(input) (connect output input)) inputs))
+  (:method ((outputs sequence) (entity with-inputs))
+    (connect outputs (inputs entity)))
+  (:method ((outputs sequence) (inputs sequence))
+    (map 'nil #'connect outputs inputs))
+  (:method ((entity with-outputs) input)
+    (connect (outputs entity) input)))
+
 
 (defgeneric disconnect(input)
   (:documentation "Disconnect an input")
