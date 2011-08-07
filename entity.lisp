@@ -30,13 +30,14 @@
 
 (in-package :logsim)
 
+(defvar *entities* (make-hash-table)  "Hash of all entities")
+
 (defconstant high 1 "High value boolean")
 (defconstant low 0 "High value boolean")
 (defvar *default-delay* 0)
 
 (defclass entity()
   ((lastid :allocation :class :initform 0)
-   (id :type integer :reader id)
    (name :initarg :name :type symbol :accessor name))
   (:documentation "A general simulation entity"))
 
@@ -46,12 +47,26 @@
       (print-unreadable-object(entity stream :type t)
         (write (name entity) :stream stream))))
 
-(defmethod initialize-instance :after ((e entity) &key &allow-other-keys)
-  (setf (slot-value e 'id) (incf (slot-value e 'lastid)))
-  (unless (slot-boundp e 'name)
-    (setf (slot-value e 'name)
-          (intern (format nil "~A~3,'0D" (class-name (class-of e)) (id e)))))
-  (push e (entities *simulator*)))
+(defmethod initialize-instance :after ((entity entity) &key &allow-other-keys)
+  (with-slots(name lastid) entity
+    (incf lastid)
+    (unless (slot-boundp entity 'name)
+      (setf name
+            (intern (format nil "~A~3,'0D" (class-name (class-of entity))
+                            lastid))))
+    (when (gethash name *entities*)
+      (error "Duplicate entity name ~A" name))
+    (setf (gethash name *entities*) entity)))
+
+(defmethod reset((entities hash-table))
+  (maphash #'(lambda(k e)
+               (declare (ignore k))
+               (when (typep e 'source) (reset e)))
+           entities)
+  (maphash #'(lambda(k e)
+                (declare (ignore k))
+                (unless (typep e 'source) (reset e)))
+           entities))
 
 (defclass connection()
   ((entity :type entity :initarg :entity :reader entity
@@ -200,18 +215,19 @@
 
 (defun con-reader(is &optional char p)
   (declare (ignore char p))
-  (let* ((names (read-delimited-list #\} is))
-         (entity (find (first names) (entities *simulator*)
-                       :key #'name))
-         (pin (second names)))
-    (unless entity  (error "No entity ~A defined" entity))
-    (unless pin (return-from con-reader entity))
-    (or
-      (when (typep entity 'with-inputs)
-        (find pin (inputs entity) :key #'name))
-      (when (typep entity 'with-outputs)
-        (find pin (outputs entity) :key #'name))
-      (error "No connection ~A on ~A" pin entity))))
+  (do* ((names (read-delimited-list #\} is) (rest names))
+        (entity (gethash (first names) *entities*)
+                (gethash (first names) (components entity))))
+       ((not (or (rest names) (typep entity 'logic-block)))
+        (when entity
+          (if (rest names)
+              (let ((pin (second names)))
+              (or
+               (when (typep entity 'with-inputs)
+                 (find pin (inputs entity) :key #'name))
+               (when (typep entity 'with-outputs)
+                 (find pin (outputs entity) :key #'name))))
+              entity)))))
 
 (set-dispatch-macro-character #\# #\{ #'con-reader)
 
@@ -227,3 +243,13 @@
         (setf old new))
       (let ((changed (bit-xor new old)))
         (values (setf old new) changed)))))
+
+(defun load-example(name &key (reset t))
+  (when reset
+    (clrhash *entities*)
+    (reset *simulator*))
+  (load (merge-pathnames
+         (make-pathname :name name :type "lisp")
+         #.(asdf:system-relative-pathname :logsim "/examples/"))
+        :verbose nil :print nil)
+  (format t "~%-- Example ~S loaded~%" name))

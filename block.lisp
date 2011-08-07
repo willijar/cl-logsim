@@ -29,34 +29,39 @@
 
 (in-package :logsim)
 
-(defvar *block-definitions* (make-hash-table) "Block Definitions")
+(defvar *block-definitions* (make-hash-table)
+  "Global registry of named Block Definitions")
+
+(defun get-block-definition(definition args)
+  (etypecase definition
+    (symbol (funcall (or (gethash definition *block-definitions*)
+                         (error "No defined bloc type ~A" definition))
+                     args))
+    (list definition)
+    (function (funcall definition args))))
 
 (defmacro define-logic-block(name (&rest args) &body body)
   (setf (gethash name *block-definitions*)
         `(lambda(,@args) ,@body)))
 
 (defclass logic-block(entity with-inputs with-outputs)
-  ((block-type :type symbol :initarg :type :reader block-type
+  ((definition :initarg :definition :initarg :type :reader definition
                :documentation "Block type definition")
    (components :initform (make-hash-table) :reader components
-               :documentation "components in this entity"))
+               :documentation "locally named components in this entity"))
   (:documentation "A logic block"))
 
-(defmethod initialize-instance :before ((b logic-block) &key type &allow-other-keys)
-  (unless (gethash type *block-definitions*)
-    (error "No logic block ~A defined." type)))
+(defmethod initialize-inputs ((b logic-block) &rest args)
+  (getf (get-block-definition (definition b) args) :inputs))
 
-(defmethod initialize-inputs  ((b logic-block) &rest args &key type &allow-other-keys)
-  (getf (funcall (gethash type *block-definitions*) args) :inputs))
+(defmethod initialize-outputs ((b logic-block)  &rest args)
+  (getf (get-block-definition (definition b) args) :outputs))
 
-(defmethod initialize-outputs ((b logic-block) &rest args &key type &allow-other-keys)
-  (getf (funcall (gethash type *block-definitions*) args) :outputs))
-
-(defmethod initialize-instance :after ((b logic-block) &rest args &key type &allow-other-keys)
+(defmethod initialize-instance :after ((b logic-block) &rest args)
   ;; all inputs and outputs should be connectors
   (map 'nil #'(lambda(n) (change-class n 'connector))
        (append (inputs b) (outputs b)))
-  (let ((def (funcall (gethash type *block-definitions*) args))
+  (let ((def (get-block-definition (definition b) args))
         (components (components b)))
     ;; create and add components to this block
     (dolist(def (getf def :components))
@@ -86,11 +91,11 @@
     (maphash
      #'(lambda(name component)
          (let ((n (find nil (inputs component) :key #'connection)))
-           (when n (error "Input ~A of component ~A in ~A block ~A not connected"
-                          n name type (name b))))
+           (when n (error "Input ~A of component ~A in block ~A not connected"
+                          n name  (name b))))
          (let ((n (find nil (outputs component) :key #'connections)))
-           (when n (error "Output ~A of component ~A in ~A block ~A not connected"
-                          n name type (name b)))))
+           (when n (error "Output ~A of component ~A in block ~A not connected"
+                          n name  (name b)))))
      components)
     (let ((unconnected (find nil (inputs b) :key #'connections)))
       (when unconnected (error "Block Input ~A unconnected" unconnected)))

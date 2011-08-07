@@ -17,14 +17,8 @@
 (defvar *simulator* nil
  "The global simulator instance")
 
-(defvar *reset-hooks* nil "List of hooks to call to reset simulation -
-called after all entities created before running simulation")
-(defvar *time-format* "~6,3f"  "Time output format control")
-
 (defclass simulator ()
-  ((entities :initform nil :accessor entities
-             :documentation "List of all defined entities in this simulation")
-   (simulation-time :type float :initform 0.0
+  ((simulation-time :type float :initform 0.0
 	  :accessor simulation-time :initarg :start-time
 	  :documentation "simulator virtual time")
    (halted :type boolean :initform t :accessor halted)
@@ -42,10 +36,9 @@ called after all entities created before running simulation")
 
 (defmethod print-object((simulator simulator) stream)
   (print-unreadable-object (simulator stream :type t :identity t)
-     (format stream "time:~f~:[~; HALTED~] ~D pending events ~D entities"
+     (format stream "time:~f~:[~; HALTED~] ~D pending events"
 	     (simulation-time simulator) (halted simulator)
-       (alg:size (slot-value simulator 'event-queue))
-       (length (entities simulator)))))
+       (alg:size (slot-value simulator 'event-queue)))))
 
 (defun schedule(delay function)
   (when (< delay 0)
@@ -66,11 +59,7 @@ called after all entities created before running simulation")
   (stop simulator :abort t)
   (setf (simulation-time simulator) 0.0d0)
   (let ((q  (event-queue simulator)))
-    (while (not (empty-p q)) (dequeue q)))
-  (map 'nil
-       #'(lambda(e) (when (typep e 'source) (reset e))) (entities simulator))
-  (map 'nil
-       #'(lambda(e) (unless (typep e 'source) (reset e))) (entities simulator)))
+    (while (not (empty-p q)) (dequeue q))))
 
 (defmethod start(simulator &key (granularity 10000) (stop 100) &allow-other-keys)
   "Execute the simulator returning the running
@@ -105,17 +94,7 @@ are dispatched in current thread"
         (funcall #'run simulator))))
 
 (eval-when(:load-toplevel :execute)
-  (unless *simulator* (setf *simulator* (make-instance 'simulator)))
-  (pushnew *simulator* *reset-hooks*))
+  (unless *simulator* (setf *simulator* (make-instance 'simulator))))
 
 (defun start-simulation() (start *simulator*))
 (defun stop-simulation() (stop *simulator*))
-
-(defun load-example(name &key (reset t))
-  (when reset
-    (setf (entities *simulator*) nil)
-    (reset *simulator*))
-  (load (merge-pathnames (make-pathname :name name :type "lisp")
-                         #.(asdf:system-relative-pathname :logsim "/example"))
-        :verbose nil :print nil)
-  (format t "~%-- Example ~S loaded~%" name))

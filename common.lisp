@@ -182,3 +182,8 @@ Examples:
     (dotimes(i no-bits)
       (setf (aref result (- no-bits i 1)) (ldb (byte 1 i) int)))
     result))
+
+(defun cl-user::bv(os arg &rest args)
+  "Print out a bit vector as a sequence of digits"
+  (declare (ignore args))
+  (format os  "~{~A~}" (coerce arg 'list)))
