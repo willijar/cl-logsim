@@ -217,7 +217,7 @@ node [shape=circle];" stream)
 ;; expressions are compiled and checked on model creation into two functions
 ;; - one for setting state and one for asserting outputs
 
-(defclass asm(fsm)
+(defclass asm-model(fsm)
   ((compiled-state-data :reader compiled-state-data))
   (:documentation "An Algorithmic State Machine Model"))
 
@@ -278,3 +278,78 @@ node [shape=circle];" stream)
 ;;   (bit-xor
 ;;    (funcall (second row) (bit-xor input-vector (slot-value asm 'input-mask)))
 ;;    (slot-value asm 'output-mask)))
+
+(defun cl-user::expr(os expr &rest args)
+  "Print out a an expression as UTF-8 text"
+  (declare (ignore args))
+  (etypecase expr
+    (symbol (write expr :stream os))
+    (bit-vector (format os  "~{~A~}" (coerce expr 'list)))
+    (list
+     (let ((op (first expr)))
+       (ecase op
+         (or (format os "(~{~/expr/~^·~})" (rest expr)))
+         (and (format os "(~{~/expr/~^×~})" (rest expr)))
+         (xor (format os "(~{~/expr/~^xor~})" (rest expr)))
+         (not (format os "~~~/expr/" (second expr)))
+         (nor (cl-user::expr os (list 'not (cons 'or (rest expr)))))
+         (nand (cl-user::expr os (list 'not (cons 'and (rest expr)))))
+         (xnor (cl-user::expr os (list 'not (cons 'xor (rest expr))))))))))
+
+(defmethod write-state-diagram((entity asm-model) (format (eql :dot))  &optional (stream *standard-output*))
+  (let ((label 0) ;; numberical label for non state nodes
+        (nodes))
+    (labels ((edge(from to &optional options)
+               (pushnew from nodes :test #'equal)
+               (pushnew to nodes :test #'equal)
+               (format stream
+                       "~:[~A~;~/bv/~] -> ~:[~A~;~/bv/~] [~:[~;tailport=s,~]headport=n~@[,~A~]];~%"
+                       (typep from 'bit-vector) from
+                       (typep to 'bit-vector) to
+                       (typep from 'bit-vector) options))
+             (back-ref-p(e) (member e nodes :test #'equal))
+             (expand-expr(expr from &optional options)
+               (cond
+                 ((typep expr 'bit-vector) ; move to next state
+                  (edge from expr options))
+                 ((eql (first expr) '?) ; conditional test
+                  (unless (= (length expr) 4)
+                    (error "~A should have 4 arguments" expr))
+                  (let ((newlabel (incf label)))
+                    (format stream "~D [label=\"~/expr/\",shape=diamond];~%"
+                            newlabel (second expr))
+                    (edge from newlabel options)
+                    (let ((both-forward
+                           (not (or (back-ref-p (third expr))
+                                    (back-ref-p (fourth expr))))))
+                      (expand-expr
+                       (third expr) newlabel
+                       (format nil "tailport=~:[s~;e~],taillabel=\"1\""
+                               (or  (back-ref-p (third expr)) both-forward)))
+                      (expand-expr
+                       (fourth expr) newlabel
+                       (format nil "tailport=~:[s~;w~],taillabel=\"0\""
+                               (or  (back-ref-p (fourth expr)) both-forward))))))
+                 (t ; conditional variables
+                  (unless (= (length expr) 2)
+                    (error "~A should only have 2 arguments" expr))
+                  (let ((newlabel (incf label)))
+                  (format stream "~D [label=\"~{~A~^\\n~}\",shape=box,style=rounded];~%"
+                          label (first expr))
+                  (edge from newlabel options)
+                  (expand-expr (second expr) newlabel "tailport=s"))))))
+  (write-line "digraph state_diagram {
+rankdir=TB;
+concentrate=true;
+node[height=0.25];
+Start [shape=none,label=\"Start\"];" stream)
+  ;; write out state node data first
+  (dolist(row (state-data entity))
+    (format stream "~/bv/ [shape=record,label=\"~:*~/bv/|~@[~{~A~^\\n~}~]\"];~%"
+            (first row) (second row)))
+  ;; connect start to initial state
+  (format stream "Start -> ~/bv/ [tailport=s,headport=n];~%" (initial-state-vector entity))
+  ;; now write out the state data
+  (dolist(row (state-data entity))
+    (expand-expr (third row) (first row)))
+  (write-line "}" stream))))
