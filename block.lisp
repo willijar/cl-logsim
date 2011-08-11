@@ -102,3 +102,20 @@
     (let ((unconnected (find nil (outputs b) :key #'connection)))
       (when unconnected (error "Block Output ~A unconnected" unconnected)))))
 
+(defun con-reader(is &optional char p)
+  (declare (ignore char p))
+  (do* ((names (read-delimited-list #\} is) (rest names))
+        (entity (gethash (first names) *entities*)
+                (gethash (first names) (components entity))))
+       ((not (or (rest names) (typep entity 'logic-block)))
+        (when entity
+          (if (rest names)
+              (let ((pin (second names)))
+              (or
+               (when (typep entity 'with-inputs)
+                 (find pin (inputs entity) :key #'name))
+               (when (typep entity 'with-outputs)
+                 (find pin (outputs entity) :key #'name))))
+              entity)))))
+
+(set-dispatch-macro-character #\# #\{ #'con-reader)

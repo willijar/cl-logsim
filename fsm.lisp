@@ -47,12 +47,13 @@
   ;;Add clock as 0th input
   `(CLK ,@inputs))
 
+(defun symbol-sequence(prefix n)
+  (mapcar #'(lambda(n) (intern (format nil "~A~D" prefix n)))
+          (integer-sequence n)))
+
 (defmethod initialize-outputs ((fsm fsm) &key no-state-bits outputs &allow-other-keys)
   ;; add state bits as outputs - useful for tracing purposes
-  (nconc
-   (mapcar #'(lambda(n) (intern (format nil "X~D" n)))
-           (integer-sequence no-state-bits))
-   outputs))
+  (nconc (nreverse (symbol-sequence "X" no-state-bits)) outputs))
 
 (defmethod initialize-instance :after ((fsm fsm) &key &allow-other-keys)
   (unless (slot-boundp fsm 'initial-state-vector)
@@ -77,17 +78,87 @@
   (:documentation "Return the ouput bit vector given the input-vector
   and state-data-row for the current state"))
 
+(defun fsm-iterate(fsm input-sequence &optional (state (caar (state-data fsm))))
+  (flet ((row() (rest (find state (state-data fsm)
+                            :test #'equal :key #'car))))
+  (map 'list
+       #'(lambda(input-vector)
+           (setf state (next-state fsm input-vector (row)))
+           (output-vector fsm input-vector (row)))
+       input-sequence)))
+
+(defstruct state-table
+  (inputs nil :type list)
+  (outputs nil :type list)
+  (rows nil :type list))
+
 (defgeneric state-table(entity)
-  (:documentation "Return the state table for a FSM in a standardised format.
-Each row has initial state, input vector, output state, and output vector
-First row has lists of names
-other rows have vectors."))
+  (:documentation "Return the state table for a FSM in a standardised format.")
+  (:method((fsm fsm))
+    (let* ((n (1- (length (inputs fsm))))
+           (b (length (state fsm)))
+           (input-vectors
+            (map 'list #'(lambda(i) (integer-to-bit-vector i n))
+                 (integer-sequence (ash 1 n)))))
+      (make-state-table
+       :inputs (nconc (nreverse (symbol-sequence "X" b))
+                      (map 'list #'name (subseq (inputs fsm) 1)))
+       :outputs (map 'list #'name (outputs fsm))
+       :rows
+       (mapcan
+        #'(lambda(row)
+            (let ((state (car row))
+                  (row (rest row)))
+              (mapcar
+               #'(lambda(input-vector)
+                   (concatenate
+                    'bit-vector
+                    state
+                    input-vector
+                    (next-state fsm input-vector row)
+                    (output-vector fsm input-vector row)))
+               input-vectors)))
+        (state-data fsm))))))
+
 
 (defgeneric write-state-diagram(entity format &optional stream)
   (:documentation "Write as state diagram out in specified format"))
 
 (defgeneric write-state-table(entity format &optional stream)
-  (:documentation "Write state table in given format"))
+  (:documentation "Write state table in given format")
+  (:method((state-table state-table) (format (eql :latex))
+           &optional (stream *standard-output*))
+    (format stream "\\begin{tabular}{~{~*c~}|~{~*c~}}
+\\multicolumn{~D}{c|}{Inputs} & \\multicolumn{~D}{c}{Outputs}\\\\
+~4:*~{~A & ~}~{~A ~^& ~}\\\\\\hline~%"
+            (state-table-inputs state-table)
+            (state-table-outputs state-table)
+            (length (state-table-inputs state-table))
+            (length (state-table-outputs state-table)))
+    (map 'nil
+         #'(lambda(row)
+             (format stream "~{~D ~^& ~}\\\\~%"
+                     (coerce row 'list)))
+         (state-table-rows state-table))
+    (format stream "\\end{tabular}~%")))
+
+(defgeneric write-karnaugh-map(entity output format &optional stream)
+  (:documentation "Output Karnaughmap for a particular output")
+  (:method((table state-table) output (format (eql :latex))
+           &optional (stream *standard-output*))
+    (let* ((n (length (state-table-inputs table)))
+           (o (+ n (position output (state-table-outputs table)))))
+      (format stream "\\karnaughmap{~D}{~A}{~{{~A}~}}{~{~A~}}{}~%"
+              n output (state-table-inputs table)
+              (map 'list
+                   #'(lambda(i)
+                       (let* ((iv (integer-to-bit-vector i n))
+                              (row (find iv (state-table-rows table)
+                                         :test #'equal
+                                         :key #'(lambda(row)
+                                                  (subseq row 0 n)))))
+                         (if (and row (= (bit row o) 1)) "1" "~")))
+                   (integer-sequence (ash 1 n)))))))
 
 (defmethod calculate-output-signals((fsm fsm))
   (let ((state (state fsm))
@@ -119,63 +190,65 @@ other rows have vectors."))
            (find input-vector (rest entry) :test #'equal :key #'car)))
       (when transition (return-from output-vector (cdr transition))))))
 
-(defmethod state-table :around ((fsm fsm))
-  (let ((sn (length (state fsm))))
-  (cons
-   (list (mapcar #'name (subseq (outputs fsm) sn))
-         (map 'list #'name (subseq (inputs fsm) 1))
-         (mapcar #'name (subseq (outputs fsm) sn))
-         (map 'list #'name (subseq (outputs fsm) 0 sn)))
-   (call-next-method))))
+;; (defmethod state-table :around ((fsm fsm))
+;;   (let ((sn (length (state fsm))))
+;;   (cons
+;;    (list (mapcar #'name (subseq (outputs fsm) sn))
+;;          (map 'list #'name (subseq (inputs fsm) 1))
+;;          (mapcar #'name (subseq (outputs fsm) sn))
+;;          (map 'list #'name (subseq (outputs fsm) 0 sn)))
+;;    (call-next-method))))
 
-(defmethod state-table((fsm mealy-model))
-  (mapcan
-    #'(lambda(state-row)
-        (let ((initial-state (coerce (car state-row) 'list)))
-          (mapcan
-           #'(lambda(entry)
-               (let ((next-state (coerce (car entry) 'list)))
-                 (mapcar
-                  #'(lambda(transition)
-                      (list
-                       initial-state
-                       (coerce (car transition) 'list)
-                       next-state
-                       (coerce (cdr transition) 'list)))
-                  (cdr entry))))
-           (rest state-row))))
-    (state-data fsm)))
+;; (defmethod state-table((fsm mealy-model))
+;;   (mapcan
+;;     #'(lambda(state-row)
+;;         (let ((initial-state (coerce (car state-row) 'list)))
+;;           (mapcan
+;;            #'(lambda(entry)
+;;                (let ((next-state (coerce (car entry) 'list)))
+;;                  (mapcar
+;;                   #'(lambda(transition)
+;;                       (list
+;;                        initial-state
+;;                        (coerce (car transition) 'list)
+;;                        next-state
+;;                        (coerce (cdr transition) 'list)))
+;;                   (cdr entry))))
+;;            (rest state-row))))
+;;     (state-data fsm)))
 
 (defclass moore-model(fsm)
   ()
   (:documentation "An FSM based on the Moore model"))
 
 (defmethod next-state((fsm moore-model) input-vector state-data-row)
-  (car (some #'(lambda(entry) (find input-vector (rest entry) :test #'equal))
-             state-data-row)))
+  (some #'(lambda(entry)
+            (when (find input-vector (rest entry) :test #'equal)
+              (car entry)))
+        (rest state-data-row)))
 
 (defmethod output-vector((fsm moore-model) input-vector state-data-row)
   (declare (ignore input-vector))
   (first state-data-row))
 
-(defmethod state-table((fsm moore-model))
-  (mapcan
-    #'(lambda(state-row)
-        (let ((initial-state (coerce (car state-row) 'list))
-              (output (coerce (second state-row) 'list)))
-          (mapcan
-           #'(lambda(entry)
-               (let ((next-state (coerce (car entry) 'list)))
-                 (mapcar
-                  #'(lambda(transition)
-                      (list
-                       initial-state
-                       (coerce transition 'list)
-                       next-state
-                       output))
-                  (cdr entry))))
-           (cddr state-row))))
-    (state-data fsm)))
+;; (defmethod state-table((fsm moore-model))
+;;   (mapcan
+;;     #'(lambda(state-row)
+;;         (let ((initial-state (coerce (car state-row) 'list))
+;;               (output (coerce (second state-row) 'list)))
+;;           (mapcan
+;;            #'(lambda(entry)
+;;                (let ((next-state (coerce (car entry) 'list)))
+;;                  (mapcar
+;;                   #'(lambda(transition)
+;;                       (list
+;;                        initial-state
+;;                        (coerce transition 'list)
+;;                        next-state
+;;                        output))
+;;                   (cdr entry))))
+;;            (cddr state-row))))
+;;     (state-data fsm)))
 
 (defmethod write-state-diagram((entity mealy-model) (format (eql :dot))
                                &optional (stream *standard-output*))
@@ -288,9 +361,9 @@ node [shape=circle];" stream)
     (list
      (let ((op (first expr)))
        (ecase op
-         (or (format os "(~{~/expr/~^·~})" (rest expr)))
-         (and (format os "(~{~/expr/~^×~})" (rest expr)))
-         (xor (format os "(~{~/expr/~^xor~})" (rest expr)))
+         (or (format os "(~{~/expr/~^+~})" (rest expr)))
+         (and (format os "(~{~/expr/~^·~})" (rest expr)))
+         (xor (format os "(~{~/expr/~^ xor ~})" (rest expr)))
          (not (format os "~~~/expr/" (second expr)))
          (nor (cl-user::expr os (list 'not (cons 'or (rest expr)))))
          (nand (cl-user::expr os (list 'not (cons 'and (rest expr)))))
