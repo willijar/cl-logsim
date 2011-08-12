@@ -29,8 +29,24 @@
 
 (in-package :logsim)
 
+(defclass logic-block(entity with-inputs with-outputs)
+  ((definition :initarg :definition :initarg :type :reader definition
+               :documentation "Block type definition")
+   (components :initform (make-hash-table) :reader components
+               :documentation "locally named components in this entity"))
+  (:documentation "A logic block"))
+
+(defmethod initialize-instance :after ((b logic-block) &key &allow-other-keys)
+  ;; all inputs and outputs should be connectors
+  (map 'nil #'(lambda(n) (change-class n 'connector))
+       (concatenate 'list (inputs b) (outputs b))))
+
 (defvar *block-definitions* (make-hash-table)
   "Global registry of named Block Definitions")
+
+(defmacro define-logic-block(name (&rest args) &body body)
+  (setf (gethash name *block-definitions*)
+        `(lambda(,@args) ,@body)))
 
 (defun get-block-definition(definition args)
   (etypecase definition
@@ -40,67 +56,144 @@
     (list definition)
     (function (funcall definition args))))
 
-(defmacro define-logic-block(name (&rest args) &body body)
-  (setf (gethash name *block-definitions*)
-        `(lambda(,@args) ,@body)))
+(defvar *env* (make-hash-table)
+  "Name space environment for logic block construction. Maps names to either
+an output to be resolved to a given name or a list of inputs which
+need to be connected to that symbol once it is resolved.")
 
-(defclass logic-block(entity with-inputs with-outputs)
-  ((definition :initarg :definition :initarg :type :reader definition
-               :documentation "Block type definition")
-   (components :initform (make-hash-table) :reader components
-               :documentation "locally named components in this entity"))
-  (:documentation "A logic block"))
+(defun resolve-output(output name)
+  (let ((r (gethash name *env*)))
+             (when (typep r 'output) (error "Duplicate output name ~A" name))
+             (map 'nil #'(lambda(input) (connect output input)) r)
+             (setf (gethash name *env*) output)))
 
-(defmethod initialize-inputs ((b logic-block) &rest args)
-  (getf (get-block-definition (definition b) args) :inputs))
+(defun resolve-input(input expr)
+  "Returns list of gates created"
+  (etypecase expr
+    (symbol (let ((r (gethash expr *env*)))
+              (if (typep r 'output)
+                  (connect r input)
+                  (setf (gethash expr *env*) (cons input r)))
+            nil))
+    (output (connect expr input) nil)
+    (bit (connect expr input) nil)
+    (list
+     ;; check for output binding operator <=
+     (let* ((bind (eql (car expr) '<=))
+            (gates (build-logic (if bind (third expr) expr)))
+            (gate (first gates)))
+       (connect
+        (if (and bind (symbolp (second expr)))
+            (find (second expr) (outputs gate) :key #'name)
+            (aref (outputs gate) (if bind (second expr) 0)))
+        input)
+       gates))))
 
-(defmethod initialize-outputs ((b logic-block)  &rest args)
-  (getf (get-block-definition (definition b) args) :outputs))
+(defun build-logic(expr)
+  "Construct a logic block using gates - returns a list of new gates
+in topoligical order. "
+  (multiple-value-bind(type init-args args)
+      (etypecase (car expr)
+        (symbol (values (car expr) nil (cdr expr)))
+        (list (values (caar expr) (cdar expr) (cdr expr))))
+    (case type
+      (=>
+       ;; variable assignment
+       (unless (= (length args) 2)
+         (error "Invalid Expression ~A 2 arguments expected" expr))
+       (let ((gates (build-logic (second args))))
+         (resolve-output (aref (outputs (first gates)) 0) (first args))
+         gates))
+      (not
+       ;; not gate
+       (unless (= (length args) 1)
+         (error "Invalid Expression ~A 1 argument expected" expr))
+       (let ((gate (apply #'make-instance 'not-gate init-args)))
+         (cons gate
+               (resolve-input (aref (inputs gate) 0) (first args)))))
+      ((or and nor nand xor)
+       ;; other common gates
+       (unless (>= (length args) 2)
+         (error "Invalid Expression ~A >1 argument expected" expr))
+       (let* ((inputs-arg)
+              (new-args nil))
+         ;; we convert nots into inverting inputs
+         (dolist(expr args)
+           (if (and (listp expr) (eql (car expr) 'not))
+               (progn
+                 (push #\i inputs-arg)
+                 (push (second expr) new-args))
+               (progn
+                 (push #\n inputs-arg)
+                 (push expr new-args))))
+         (let* ((gate
+                 (apply #'make-instance
+                        (intern (format nil "~A-GATE" (car expr)))
+                        `(:inputs ,(coerce (reverse inputs-arg) 'string)
+                                  ,@init-args))))
+           (cons
+            gate
+            (mapcan #'resolve-input
+                    (coerce (inputs gate) 'list)
+                    (reverse new-args))))))
+      (t ;; all other logic units
+       (let ((gate
+              (if (eql type 'logic-block)
+                  (build-logic-block
+                   (getf (cddr init-args) :name)
+                   (get-block-definition (second init-args) (cddr init-args)))
+                  (apply #'make-instance type init-args))))
+         (cons gate
+               (loop
+                  :for r :on args :by #'cddr
+                  :for name = (car r)
+                  :for expr = (cadr r)
+                  :for input = (find name (inputs gate) :key #'name)
+                  :for output = (find name (outputs gate) :key #'name)
+                  :when input :nconc (resolve-input input expr)
+                  :when output :do (resolve-output output expr))))))))
 
-(defmethod initialize-instance :after ((b logic-block) &rest args)
-  ;; all inputs and outputs should be connectors
-  (map 'nil #'(lambda(n) (change-class n 'connector))
-       (append (inputs b) (outputs b)))
-  (let ((def (get-block-definition (definition b) args))
-        (components (components b)))
-    ;; create and add components to this block
-    (dolist(def (getf def :components))
-      (let* ((type (second def))
-             (local-name (first def))
-             (init (cdr def))
-             (global-name (intern (format nil "~A.~A" (name b) local-name))))
-        (setf (gethash local-name components)
-              (apply #'make-instance type `(:name ,global-name ,@init)))))
-    ;; connect up components and connectors
-    (flet ((connection(def dir)
-             (etypecase def
-               (integer def)
-               (symbol ; must be block connection
-                (find def (funcall (ecase dir (:from #'inputs) (:to #'outputs))
-                                   b)
-                      :key #'name))
-               (list ; must be component connection
-                (find (cdr def)
-                      (funcall (ecase dir (:from #'outputs) (:to #'inputs))
-                               (gethash (car def) components))
-                      :key #'name)))))
-    (dolist(def (getf def :connections))
-      (connect (connection (car def) :from)
-               (connection (cdr def) :to))))
-  ;; check connectivity
-    (maphash
-     #'(lambda(name component)
-         (let ((n (find nil (inputs component) :key #'connection)))
-           (when n (error "Input ~A of component ~A in block ~A not connected"
-                          n name  (name b))))
-         (let ((n (find nil (outputs component) :key #'connections)))
-           (when n (error "Output ~A of component ~A in block ~A not connected"
-                          n name  (name b)))))
-     components)
-    (let ((unconnected (find nil (inputs b) :key #'connections)))
-      (when unconnected (error "Block Input ~A unconnected" unconnected)))
-    (let ((unconnected (find nil (outputs b) :key #'connection)))
-      (when unconnected (error "Block Output ~A unconnected" unconnected)))))
+(defun build-logic-block(name expr)
+  "Build a logic block with one output from expression. Undefined
+variables will be mapped onto inputs on the block. "
+  (let* ((*env* (make-hash-table))
+         outputs-names
+         inputs-names
+         (gates
+          (mapcan
+           #'(lambda(expr)
+               (if(eql (car expr) '=>)
+                  (progn
+                    (push (second expr) outputs-names)
+                    (build-logic expr))
+                  (build-logic expr)))
+           expr)))
+    (maphash ;; collect list of unresolved inputs as input names
+     #'(lambda(name v)
+         (when (and (listp v) (not (member name outputs-names))
+           (push name inputs-names))))
+     *env*)
+    (let ((gate
+           (make-instance
+            'logic-block
+            :name name :inputs inputs-names :outputs outputs-names
+            :definition expr)))
+      ;; connect up the inputs and outputs to components
+      (maphash
+       #'(lambda(name v)
+           (etypecase v
+             (list
+              (map 'nil
+                   #'(lambda(input)
+                       (connect (find name (inputs gate) :key #'name) input))
+                   v))
+             (output
+              (connect v (find name (outputs gate) :key #'name)))))
+       *env*)
+      ;; register gates in block
+      (dolist(igate gates)
+        (setf (gethash (name igate) (components gate)) igate))
+      gate)))
 
 (defun con-reader(is &optional char p)
   (declare (ignore char p))
@@ -111,11 +204,11 @@
         (when entity
           (if (rest names)
               (let ((pin (second names)))
-              (or
-               (when (typep entity 'with-inputs)
-                 (find pin (inputs entity) :key #'name))
-               (when (typep entity 'with-outputs)
-                 (find pin (outputs entity) :key #'name))))
+                (or
+                 (when (typep entity 'with-inputs)
+                   (find pin (inputs entity) :key #'name))
+                 (when (typep entity 'with-outputs)
+                   (find pin (outputs entity) :key #'name))))
               entity)))))
 
 (set-dispatch-macro-character #\# #\{ #'con-reader)

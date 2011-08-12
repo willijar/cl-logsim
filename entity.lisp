@@ -34,7 +34,7 @@
 
 (defconstant high 1 "High value boolean")
 (defconstant low 0 "High value boolean")
-(defvar *default-delay* 0)
+(defvar *default-delay* 0.02)
 
 (defclass entity()
   ((lastid :allocation :class :initform 0)
@@ -54,8 +54,10 @@
       (setf name
             (intern (format nil "~A~3,'0D" (class-name (class-of entity))
                             lastid))))
-    (when (gethash name *entities*)
-      (error "Duplicate entity name ~A" name))
+    (restart-case
+        (when (gethash name *entities*)
+          (error "Duplicate entity name ~A" name))
+      (continue() :report "Replace previous definition"))
     (setf (gethash name *entities*) entity)))
 
 (defmethod reset((entities hash-table))
@@ -128,7 +130,8 @@
              #'(lambda(name)
                  (make-instance 'input :entity entity :name name))
              (call-next-method))))
-  (:method((entity with-inputs) &key inputs &allow-other-keys) inputs))
+  (:method((entity with-inputs) &key inputs &allow-other-keys)
+    inputs))
 
 (defmethod initialize-instance :after((entity with-inputs) &rest args &key &allow-other-keys)
   (apply #'initialize-inputs entity args))
@@ -148,6 +151,9 @@
 (defclass connector(input output)
   ()
   (:documentation "A connector (an alias for an input or output)"))
+
+(defmethod signal-value((c connector))
+  (if (connection c) (signal-value (connection c)) 0))
 
 (defgeneric calculate-output-signals(entity)
   (:documentation "Calculate and return new output signal vector

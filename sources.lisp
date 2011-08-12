@@ -46,13 +46,20 @@ values. For non-periodic signals the last time period is ignored.")
   (let ((n (length (outputs s))))
     (setf (slot-value s 'signal-sequence)
           (map 'vector
-               #'(lambda(s)
-                   (cons
-                    (car s)
-                    (if (and (= n 1) (not (typep (cdr s) 'sequence)))
-                        (make-array 1 :element-type 'bit
-                                    :initial-element (cdr s))
-                        (coerce (cdr s) `(bit-vector ,n)))))
+               #'(lambda(signal)
+                   (multiple-value-bind(delay signal)
+                       (if (consp signal)
+                           (values (car signal) (cdr signal))
+                           (values 1 signal))
+                     (cond
+                       ((and (= n 1) (not (typep signal 'sequence)))
+                        (cons delay
+                              (make-array 1 :element-type 'bit
+                                          :initial-element signal)))
+                       ((= (length signal) (length (outputs s)))
+                        (cons delay (coerce signal `(bit-vector ,n))))
+                       (t
+                        (error "Signal vector length does not match signal output length")))))
                sequence)))
   (reset s))
 

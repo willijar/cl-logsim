@@ -34,9 +34,6 @@
            :documentation "Function to call when inputs have changed"))
   (:documentation "Entity to monitor signals"))
 
-(defmethod initialize-inputs((monitor entity) &key traces &allow-other-keys)
-  traces)
-
 (defmethod signals-changed((m monitor))
   (funcall (action m) (signal-value (inputs m))))
 
@@ -92,49 +89,49 @@
   (write-line "\\end{tikzpicture}" stream))
 
 
-(defgeneric truth-table(entity)
-  (:documentation "Return the truth table for entity"))
+;; (defgeneric truth-table(entity)
+;;   (:documentation "Return the truth table for entity"))
 
-(defmethod truth-table(entity)
-  (labels ((free-inputs(x)
-             (etypecase x
-               (input (unless (connection x) (list x)))
-               (with-inputs (free-inputs (coerce (inputs x) 'list)))
-               (list (mapcan #'free-inputs x))))
-           (free-outputs(x)
-             (etypecase x
-               (output (when (or (not (connections x))
-                                 (and (listp entity)
-                                      (set-difference (connections x) entity)))
-                         (list x)))
-               (with-outputs (free-outputs (coerce (outputs x) 'list)))
-               (list (mapcan #'free-outputs x)))))
-    (let* ((inputs (free-inputs entity))
-           (outputs (free-outputs entity))
-           (n (length inputs))
-           (op
-            (map 'vector
-            #'(lambda(input-values)
-                (setf (signal-value inputs) input-values)
-                (cons input-values (signal-value outputs)))
-            (mapcar #'(lambda(i) (integer-to-bit-vector i n))
-                    (integer-sequence (ash 1 n))))))
-      (map 'nil #'disconnect inputs)
-      (values op
-              (cons inputs outputs)))))
+;; (defmethod truth-table(entity)
+;;   (labels ((free-inputs(x)
+;;              (etypecase x
+;;                (input (unless (connection x) (list x)))
+;;                (with-inputs (free-inputs (coerce (inputs x) 'list)))
+;;                (list (mapcan #'free-inputs x))))
+;;            (free-outputs(x)
+;;              (etypecase x
+;;                (output (when (or (not (connections x))
+;;                                  (and (listp entity)
+;;                                       (set-difference (connections x) entity)))
+;;                          (list x)))
+;;                (with-outputs (free-outputs (coerce (outputs x) 'list)))
+;;                (list (mapcan #'free-outputs x)))))
+;;     (let* ((inputs (free-inputs entity))
+;;            (outputs (free-outputs entity))
+;;            (n (length inputs))
+;;            (op
+;;             (map 'vector
+;;             #'(lambda(input-values)
+;;                 (setf (signal-value inputs) input-values)
+;;                 (cons input-values (signal-value outputs)))
+;;             (mapcar #'(lambda(i) (integer-to-bit-vector i n))
+;;                     (integer-sequence (ash 1 n))))))
+;;       (map 'nil #'disconnect inputs)
+;;       (values op
+;;               (cons inputs outputs)))))
 
-(defgeneric write-truth-table(trace format &optional stream)
-  (:documentation "Write a timing diagram to stream"))
+;; (defgeneric write-truth-table(trace format &optional stream)
+;;   (:documentation "Write a timing diagram to stream"))
 
-(defmethod write-truth-table(entity (format (eql :tikz))
-                             &optional (stream *standard-output*))
-  (multiple-value-bind(data columns) (truth-table entity)
-    (format stream "\\begin{tabular}{~{~*c~}|~{~*c~}}~%" (car columns) (cdr columns))
-    (format stream "\\multicolumn{~D}{c|}{Inputs} & \\multicolumn{~D}{c}{Outputs} \\\\~%" (length (car columns)) (length (cdr columns)))
-    (format stream "~{~A &~}~{~A~^ &~}\\\\\\hline~%"
-            (mapcar #'name (car columns)) (mapcar #'name (cdr columns)))
-    (loop :for row :across data
-       :do (format stream "~{~A &~}~{~A~^&~}\\\\~%"
-                   (coerce (car row) 'list)
-                   (coerce (cdr row) 'list)))
-    (write-line "\\end{tabular}" stream)))
+;; (defmethod write-truth-table(entity (format (eql :tikz))
+;;                              &optional (stream *standard-output*))
+;;   (multiple-value-bind(data columns) (truth-table entity)
+;;     (format stream "\\begin{tabular}{~{~*c~}|~{~*c~}}~%" (car columns) (cdr columns))
+;;     (format stream "\\multicolumn{~D}{c|}{Inputs} & \\multicolumn{~D}{c}{Outputs} \\\\~%" (length (car columns)) (length (cdr columns)))
+;;     (format stream "~{~A &~}~{~A~^ &~}\\\\\\hline~%"
+;;             (mapcar #'name (car columns)) (mapcar #'name (cdr columns)))
+;;     (loop :for row :across data
+;;        :do (format stream "~{~A &~}~{~A~^&~}\\\\~%"
+;;                    (coerce (car row) 'list)
+;;                    (coerce (cdr row) 'list)))
+;;     (write-line "\\end{tabular}" stream)))
