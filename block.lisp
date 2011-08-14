@@ -56,6 +56,12 @@
     (list definition)
     (function (funcall definition args))))
 
+(defmethod signals-changed((b logic-block))
+  (map 'nil
+       #'(lambda(input)
+           (dolist(c (connections input)) (signals-changed c)))
+       (inputs b)))
+
 (defvar *env* (make-hash-table)
   "Name space environment for logic block construction. Maps names to either
 an output to be resolved to a given name or a list of inputs which
@@ -200,7 +206,7 @@ variables will be mapped onto inputs on the block. "
   (do* ((names (read-delimited-list #\} is) (rest names))
         (entity (gethash (first names) *entities*)
                 (gethash (first names) (components entity))))
-       ((not (or (rest names) (typep entity 'logic-block)))
+       ((not (cddr names))
         (when entity
           (if (rest names)
               (let ((pin (second names)))
