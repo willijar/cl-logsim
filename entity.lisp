@@ -77,7 +77,7 @@
   (:documentation "A connection to an entity"))
 
 (defgeneric signal-value(signal)
-  (:documentation "Return the binary signal value of en entity")
+  (:documentation "Return the binary signal value of something")
   (:method((s integer)) s)
   (:method((s null)) 'Unconnected))
 
@@ -89,7 +89,7 @@
 
 (defclass output(connection)
   ((connections :type list :accessor connections :initform nil
-                :documentation "List of input this is connected to")
+                :documentation "List of inputs this is connected to")
    (signal-value :initarg :signal-value
                  :type bit :accessor signal-value :initform 0)))
 
@@ -111,11 +111,13 @@
                      (if (consp init)
                          (values (car init) (cdr init))
                          (values init 0))
-                   (make-instance 'output :entity entity :name name :signal-value v)))
+                   (make-instance 'output :entity entity
+                                  :name name :signal-value v)))
              (call-next-method))))
   (:method((entity with-outputs) &key outputs &allow-other-keys) outputs))
 
-(defmethod initialize-instance :after((entity with-outputs) &rest args &key &allow-other-keys)
+(defmethod initialize-instance :after((entity with-outputs)
+                                      &rest args &key &allow-other-keys)
   (apply #'initialize-outputs entity args))
 
 (defclass with-inputs()
@@ -133,7 +135,8 @@
   (:method((entity with-inputs) &key inputs &allow-other-keys)
     inputs))
 
-(defmethod initialize-instance :after((entity with-inputs) &rest args &key &allow-other-keys)
+(defmethod initialize-instance :after((entity with-inputs)
+                                      &rest args &key &allow-other-keys)
   (apply #'initialize-inputs entity args))
 
 (defmethod signal-value((ip input))
@@ -155,50 +158,73 @@
 (defmethod signal-value((c connector))
   (if (connection c) (signal-value (connection c)) 0))
 
-(defgeneric calculate-output-signals(entity)
+(defmethod (setf connections)(value (c connector))
+  (setf (connections (connection c)) value))
+
+(defmethod connections((c connector))
+  (connections (connection c)))
+
+(defgeneric calculate-output-signals(entity &optional changed-inputs)
   (:documentation "Calculate and return new output signal vector
-  from (current) inputs - if nil do not change outputs"))
+  from (current) inputs. if nil do not change outputs"))
 
-(defgeneric delay(entity)
-  (:documentation "Return the delay in updating outputs after an input
-  has changed for entity")
-  (:method(entity) 0))
-
-(defclass with-delay()
-  ((delay :initarg :delay :type float :initform *default-delay* :accessor delay
+(defclass with-delay(with-outputs)
+  ((delay :initarg :delay
+          :type float :initform *default-delay* :accessor delay
           :documentation "Gate delay"))
   (:documentation "An entity with a fixed delay between inputs
   changing and outputs being updated"))
 
-(defgeneric signals-changed(entity)
-  (:documentation "Inform a destination entity that an input has
-  changed - the corresponding output being on src")
-  (:method((entity with-outputs))
-    "For an entity with outputs calculate new oututs and schedule update"
-    (let* ((new-signals (calculate-output-signals entity))
-           (delay (delay entity)))
-      (when new-signals
-        (let ((update-outputs
-            #'(lambda()
-                (let* ((old-signals (signal-value (outputs entity)))
-                       (to-alert
-                        (apply #'nconc
-                               (map 'list
-                                    #'(lambda(oldv newv output)
-                                        (unless (equal oldv newv)
-                                          (copy-list (connections output))))
-                             old-signals new-signals (outputs entity)))))
-                  (setf (signal-value (outputs entity)) new-signals)
-                  (map 'nil #'signals-changed (delete-duplicates to-alert))))))
-          (if (zerop delay)
-              (funcall update-outputs)
-              (schedule delay update-outputs)))))))
+(defgeneric change-outputs(opvec entity)
+  (:documentation "Change the outputs of entity to op informing all
+  connected entities - pass changes to connected objects (after delay
+  if necessary")
+  (:method(new-signals (outputs sequence))
+    (when new-signals
+      (let* ((old-signals (signal-value outputs))
+             (to-alert
+              (apply #'append
+                     (map 'list
+                          #'(lambda(oldv newv output)
+                              (unless (equal oldv newv)
+                                (connections output)))
+                          old-signals new-signals outputs))))
+        (setf (signal-value outputs) new-signals)
+        (while to-alert
+          (let ((changed-inputs (list (first to-alert)))
+                (entity (entity (first to-alert))))
+            (setf to-alert
+                  (mapcan
+                   #'(lambda(input)
+                       (if (eql (entity input) entity)
+                           (progn
+                             (push input changed-inputs)
+                             nil)
+                           (list input)))
+                   (rest to-alert)))
+            (inputs-changed entity changed-inputs))))))
+  (:method(new-signals (entity with-outputs))
+    (change-outputs new-signals (outputs entity))))
+
+(defgeneric inputs-changed(entity &optional changed-inputs)
+  (:documentation "Inform an entity that its inputs have changed -
+  optionally notifying which inputs")
+  (:method((entity with-outputs) &optional changed-inputs)
+    (change-outputs (calculate-output-signals entity changed-inputs)
+                    entity))
+  (:method((entity with-delay) &optional changed-inputs)
+    (if (zerop (delay entity))
+        (call-next-method)
+        (schedule
+         (delay entity)
+         (let ((opvec (calculate-output-signals entity changed-inputs)))
+           #'(lambda() (change-outputs opvec entity)))))))
 
 (defgeneric connect(output input)
   (:documentation "Connect an output to an input")
   (:method :after(output (input input))
-           (when (every #'connection (inputs (entity input)))
-             (signals-changed (entity input))))
+     (when (every #'connection (inputs (entity input)))
+       (inputs-changed (entity input) (inputs (entity input)))))
   (:method((output output) (input input))
     (restart-case
         (when (connection input)
@@ -209,7 +235,7 @@
           (return-from connect))
       (replace()
           :report "Replace previous connection"))
-    (pushnew (entity input) (connections output))
+    (pushnew input (connections output))
     (setf (connection input) output))
   (:method ((output integer) (input input))
     (setf (connection input) output))
@@ -224,8 +250,32 @@
     (let ((op (connection input)))
       (setf (connection input) nil)
       (when (typep op 'output)
-      (unless (find op (inputs (entity input)) :key #'connection)
-        (setf (connections op) (delete (entity input) (connections op))))))))
+        (setf (connections op) (delete input (connections op)))))))
+
+(defclass with-clk(with-inputs)
+  ((control :initform 1 :type bit :initarg :control
+            :initarg :edge
+            :documentation "Clock edge transition control - +ve if 1")
+   (last-clk :type bit :documentation "Last read clock value")
+   (clk-input :type input :reader clk-input
+              :documentation "The clock input connection")))
+
+(defmethod initialize-instance :after ((entity with-clk) &key (clk-input 'CLK))
+  (setf (slot-value entity 'clk-input)
+        (etypecase clk-input
+          (symbol
+           (or (find clk-input (inputs entity) :key 'name)
+               (error "~A is not a valid clock for ~A" clk-input entity)))
+          (input clk-input)
+          (number (aref (inputs entity) clk-input))))
+  (setf (slot-value entity 'last-clk) (signal-value (clk-input entity))))
+
+(defun clock-edge-p(entity)
+  (let ((clk (signal-value (clk-input entity))))
+    (with-slots(last-clk control) entity
+      (prog1
+          (and (/= clk last-clk) (= clk control))
+        (setf last-clk clk)))))
 
 (defclass with-edge-detection()
   ((input-signal-vector :type bit-vector))

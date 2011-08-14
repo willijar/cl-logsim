@@ -56,11 +56,9 @@
     (list definition)
     (function (funcall definition args))))
 
-(defmethod signals-changed((b logic-block))
-  (map 'nil
-       #'(lambda(input)
-           (dolist(c (connections input)) (signals-changed c)))
-       (inputs b)))
+(defmethod inputs-changed((b logic-block) &optional changed-inputs)
+  (declare (ignore changed-inputs))
+  (change-outputs (signal-value (inputs b)) (inputs b)))
 
 (defvar *env* (make-hash-table)
   "Name space environment for logic block construction. Maps names to either

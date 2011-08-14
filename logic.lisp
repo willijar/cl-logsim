@@ -29,7 +29,7 @@
 
 (in-package :logsim)
 
-(defclass logic(entity with-inputs with-outputs with-delay)
+(defclass logic(entity with-delay with-inputs with-outputs)
   ()
   (:documentation "base class for all logic (entities with inputs)"))
 
@@ -54,7 +54,9 @@
           (integer
            (make-array inputs :element-type 'bit :initial-element 0)))))
 
-(defmethod calculate-output-signals ((gate logic-function-gate))
+(defmethod calculate-output-signals ((gate logic-function-gate)
+                                     &optional changed-inputs)
+  (declare (ignore changed-inputs))
   (make-array 1
               :element-type 'bit
               :initial-element
@@ -80,7 +82,8 @@
 (defclass not-gate(logic-function-gate)
    ())
 
-(defmethod calculate-output-signals((gate not-gate))
+(defmethod calculate-output-signals((gate not-gate) &optional changed-inputs)
+  (declare (ignore changed-inputs))
   (bit-not (signal-value (inputs gate))))
 
 (defclass truth-table-gate(logic)
@@ -95,17 +98,23 @@
                               &key outputs &allow-other-keys)
   outputs)
 
-(defmethod calculate-output-signals((gate truth-table-gate))
-  (aref (truth-table gate) (bit-vector-to-integer (signal-value (inputs gate)))))
+(defmethod calculate-output-signals((gate truth-table-gate)
+                                    &optional changed-inputs)
+  (declare (ignore changed-inputs))
+  (aref (truth-table gate)
+        (bit-vector-to-integer (signal-value (inputs gate)))))
 
 (defclass decoder(logic)
   ()
-  (:documentation "Line Decoder class - takes inputs as number of address lines"))
+  (:documentation "Line Decoder class - takes inputs as number of
+  address lines"))
 
-(defmethod initialize-outputs((decoder decoder) &key (inputs 2) &allow-other-keys)
+(defmethod initialize-outputs((decoder decoder)
+                              &key (inputs 2) &allow-other-keys)
   (integer-sequence (ash 1 inputs)))
 
-(defmethod calculate-output-signals((decoder decoder))
+(defmethod calculate-output-signals((decoder decoder) &optional changed-inputs)
+  (declare (ignore changed-inputs))
   (let ((op (make-array (length (outputs decoder)) :element-type 'bit
                         :initial-element 0)))
     (setf (aref op (bit-vector-to-integer (signal-value (inputs decoder)))) 1)
@@ -123,8 +132,9 @@
        (mapcar #'(lambda(n) (iname #\S n)) (integer-sequence n))
        (mapcar #'(lambda(n) (iname #\I n)) (integer-sequence (ash 1 n)))))))
 
-(defmethod calculate-output-signals((m multiplexer))
-  (let* ((n (slot-value m 'n))
+(defmethod calculate-output-signals((m multiplexer) &optional changed-inputs)
+ (declare (ignore changed-inputs))
+ (let* ((n (slot-value m 'n))
          (iv (signal-value (inputs m)))
          (addr (bit-vector-to-integer (subseq iv 0 n))))
       (make-array 1 :element-type 'bit

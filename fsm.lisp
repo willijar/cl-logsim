@@ -29,18 +29,14 @@
 
 (in-package :logsim)
 
-(defclass fsm(entity with-inputs with-outputs with-edge-detection)
-  ((control :initform 1 :type bit :initarg :control
-            :initarg :edge
-            :documentation "Clock edge transition control - +ve if 1")
-   (state :type bit-vector :accessor state
+(defclass fsm(entity with-clk with-inputs with-outputs)
+  ((state :type bit-vector :accessor state
           :documentation "Current state vector")
    (initial-state-vector :initarg :initial-state-vector
                          :type bit-vector :reader initial-state-vector
                          :documentation "Initial state vector upon reset")
    (state-data :type list :reader state-data :initarg :state-data
-                :documentation "The state transition table" )
-   (clk :type bit :documentation "Last read clock value"))
+                :documentation "The state transition table" ))
   (:documentation "An finite state machine entity"))
 
 (defmethod initialize-inputs  ((fsm fsm) &key inputs &allow-other-keys)
@@ -62,14 +58,6 @@
 
 (defmethod reset((fsm fsm))
   (setf (state fsm) (initial-state-vector fsm)))
-
-(defun clock-edge-p(fsm)
-  (let ((new-clk (signal-value (aref (inputs fsm) 0))))
-    (with-slots(clk control) fsm
-      (unless (slot-boundp fsm 'clk) (setf clk new-clk))
-      (prog1
-          (and (/= new-clk clk) (= new-clk control))
-        (setf clk new-clk)))))
 
 (defgeneric next-state(finite-state-machine input-vector state-data-row)
   (:documentation "Return the next state bit vector given the input-vector and state-data-row for the current state"))
@@ -120,7 +108,6 @@
                input-vectors)))
         (state-data fsm))))))
 
-
 (defgeneric write-state-diagram(entity format &optional stream)
   (:documentation "Write as state diagram out in specified format"))
 
@@ -160,7 +147,8 @@
                          (if (and row (= (bit row o) 1)) "1" "~")))
                    (integer-sequence (ash 1 n)))))))
 
-(defmethod calculate-output-signals((fsm fsm))
+(defmethod calculate-output-signals((fsm fsm) &optional changed-inputs)
+  (declare (ignore changed-inputs))
   (let ((state (state fsm))
         (input-vector (subseq (signal-value (inputs fsm)) 1)))
     (flet ((row(state)

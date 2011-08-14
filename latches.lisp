@@ -29,7 +29,7 @@
 
 (in-package :logsim)
 
-(defclass latch(entity with-inputs with-outputs with-delay)
+(defclass latch(entity with-delay with-inputs with-outputs)
   ()
   (:documentation "An SR latch"))
 
@@ -43,7 +43,8 @@
 (defmethod initialize-inputs((l sr-latch) &key &allow-other-keys)
   '(S R))
 
-(defmethod calculate-output-signals((l sr-latch))
+(defmethod calculate-output-signals((l sr-latch) &optional changed-inputs)
+  (declare (ignore changed-inputs))
   (let ((iv (signal-value (inputs l))))
     (cond
       ((equal iv #*00) nil)
@@ -59,7 +60,8 @@
 (defmethod initialize-inputs((l sr-latch) &key &allow-other-keys)
   '(C D))
 
-(defmethod calculate-output-signals((l d-latch))
+(defmethod calculate-output-signals((l d-latch) &optional changed-inputs)
+  (declare (ignore changed-inputs))
   (let ((iv (signal-value (inputs l))))
     (when (= (aref iv 0) (control l))
       (if (zerop (aref iv 1)) #*01 #*10))))
@@ -72,7 +74,9 @@
 (defmethod initialize-inputs((l sr-master-slave) &key &allow-other-keys)
   '(S R C))
 
-(defmethod calculate-output-signals((f sr-master-slave))
+(defmethod calculate-output-signals((f sr-master-slave)
+                                    &optional changed-inputs)
+  (declare (ignore changed-inputs))
   (with-slots((ms master-state)) f
     (if (= (control f) (signal-value (aref (outputs f) 2)))
         (setf ms (call-next-method))
@@ -86,7 +90,9 @@
 (defmethod initialize-inputs((flip-flop d-flip-flop)&key &allow-other-keys)
   '(CLK S R D))
 
-(defmethod calculate-output-signals((flip-flop d-flip-flop))
+(defmethod calculate-output-signals((flip-flop d-flip-flop)
+                                    &optional changed-inputs)
+  (declare (ignore changed-inputs))
   (multiple-value-bind(iv changed) (input-signal-vector flip-flop)
     (case
         (cond ((= 1 (aref iv 1)) 1)
@@ -104,7 +110,9 @@
 (defmethod initialize-inputs((flip-flop jk-flip-flop)&key &allow-other-keys)
   '(CLK S R J K))
 
-(defmethod calculate-output-signals((flip-flop jk-flip-flop))
+(defmethod calculate-output-signals((flip-flop jk-flip-flop)
+                                    &optional changed-inputs)
+  (declare (ignore changed-inputs))
   (multiple-value-bind(iv changed) (input-signal-vector flip-flop)
 
     (case

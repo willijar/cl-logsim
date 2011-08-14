@@ -63,25 +63,23 @@ values. For non-periodic signals the last time period is ignored.")
                sequence)))
   (reset s))
 
-(defmethod calculate-output-signals((s source))
-  (cdr (aref (signal-sequence s) (signal-index s))))
-
-(defmethod signals-changed((s source))
+(defmethod inputs-changed((s source) &optional dummy)
+  (declare (ignore dummy))
   (with-slots((idx signal-index) (seq signal-sequence)) s
     (incf idx)
     (when (>= idx (length seq))
       (if (periodic s)
           (setf idx 0)
-          (return-from signals-changed)))
+          (return-from inputs-changed)))
     ;; inform connected entities and reschedule if necessary
-    (call-next-method)
-    (schedule (car (aref seq idx)) #'(lambda() (signals-changed s)))))
+    (change-outputs (cdr (aref seq idx)) s)
+    (schedule (car (aref seq idx)) #'(lambda() (inputs-changed s)))))
 
 (defmethod reset((s source))
   (setf (signal-index s) 0)
   (let ((v (aref (signal-sequence s) 0)))
     (setf (signal-value (outputs s)) (cdr v))
-    (schedule (car v) #'(lambda() (signals-changed s)))))
+    (schedule (car v) #'(lambda() (inputs-changed s)))))
 
 (defun make-clock(&key (period *default-clk-period*) (name 'CLK))
   "Clock is just a periodic signal with one output"
