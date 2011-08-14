@@ -185,8 +185,8 @@
                         (apply #'nconc
                                (map 'list
                                     #'(lambda(oldv newv output)
-                                        (unless (= oldv newv)
-                                   (copy-list (connections output))))
+                                        (unless (equal oldv newv)
+                                          (copy-list (connections output))))
                              old-signals new-signals (outputs entity)))))
                   (setf (signal-value (outputs entity)) new-signals)
                   (map 'nil #'signals-changed (delete-duplicates to-alert))))))
@@ -200,7 +200,15 @@
            (when (every #'connection (inputs (entity input)))
              (signals-changed (entity input))))
   (:method((output output) (input input))
-    (when (connection input) (error "~A already connected" input))
+    (restart-case
+        (when (connection input)
+          (error "Unable to  connect ~A to ~A. ~A already connected."
+                 output input (connection input)))
+      (abort()
+          :report "Abort this connection"
+          (return-from connect))
+      (replace()
+          :report "Replace previous connection"))
     (pushnew (entity input) (connections output))
     (setf (connection input) output))
   (:method ((output integer) (input input))
@@ -240,4 +248,4 @@
          (make-pathname :name name :type "lisp")
          #.(asdf:system-relative-pathname :logsim "/examples/"))
         :verbose nil :print nil)
-  (format t "~%-- Example ~S loaded~%" name))
+  (format *trace-output* "~%-- Example ~S loaded~%" name))

@@ -56,7 +56,13 @@
 (defmethod initialize-instance :after ((tr trace-monitor) &key &allow-other-keys)
   (setf (slot-value tr 'action)
         #'(lambda(bits)
-            (push (cons (simulation-time *simulator*) bits) (data tr)))))
+            (setf (data tr)
+                  (cons (cons (simulation-time *simulator*) bits)
+                        (if (and (data tr)
+                                 (= (simulation-time *simulator*)
+                                    (caar (data tr))))
+                            (rest (data tr))
+                            (data tr)))))))
 
 (defmethod reset((tr trace-monitor)) (setf (data tr) nil))
 
@@ -67,10 +73,11 @@
                                 &optional (stream *standard-output*))
   (write-line "\\begin{tikzpicture}" stream)
   (let ((endtime (ceiling (car (first (data trace))))))
-    (format stream "\\axis{~{~A/-~D~^,~}}{~D}~%"
-            (mapcan #'(lambda(input n) (list (name input) n))
+    (format stream "\\axis{~{-~D/~A~^,~}}{~D}~%"
+            (mapcan #'(lambda(input n) (list n  (name input)))
                     (coerce (inputs trace) 'list)
                     (integer-sequence (length (inputs trace))))
+
             endtime)
     (let ((data (reverse (data trace))))
     (dotimes(i (length (inputs trace)))

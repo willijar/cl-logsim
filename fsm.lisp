@@ -67,9 +67,9 @@
   (let ((new-clk (signal-value (aref (inputs fsm) 0))))
     (with-slots(clk control) fsm
       (unless (slot-boundp fsm 'clk) (setf clk new-clk))
-      (when (and (/= new-clk clk) (= new-clk control))
-        (setf clk new-clk)
-        t))))
+      (prog1
+          (and (/= new-clk clk) (= new-clk control))
+        (setf clk new-clk)))))
 
 (defgeneric next-state(finite-state-machine input-vector state-data-row)
   (:documentation "Return the next state bit vector given the input-vector and state-data-row for the current state"))
@@ -169,7 +169,7 @@
       ;; we check for state change before setting output
       ;; since calculate-output-signals is atomic
       (when (clock-edge-p fsm)
-        (unless (= (setf (state fsm) (next-state fsm input-vector row))
+        (unless (equal (setf (state fsm) (next-state fsm input-vector row))
                    state)
           (setf row (row (state fsm)))))
       (concatenate 'bit-vector state
