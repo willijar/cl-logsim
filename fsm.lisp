@@ -148,7 +148,6 @@
                    (integer-sequence (ash 1 n)))))))
 
 (defmethod calculate-output-signals((fsm fsm) &optional changed-inputs)
-  (declare (ignore changed-inputs))
   (let ((state (state fsm))
         (input-vector (subseq (signal-value (inputs fsm)) 1)))
     (flet ((row(state)
@@ -156,7 +155,7 @@
       (let ((row (row state)))
       ;; we check for state change before setting output
       ;; since calculate-output-signals is atomic
-      (when (clock-edge-p fsm)
+      (when (clk-edge-p fsm changed-inputs)
         (unless (equal (setf (state fsm) (next-state fsm input-vector row))
                    state)
           (setf row (row (state fsm)))))

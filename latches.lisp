@@ -30,11 +30,16 @@
 (in-package :logsim)
 
 (defclass latch(entity with-delay with-inputs with-outputs)
-  ()
+  ((control :initform 1 :initarg :control :initarg :edge :reader control
+            :documentation "Edge or level triggering control - if 1
+            +ve, if 0 -ve"))
   (:documentation "An SR latch"))
 
 (defmethod initialize-outputs((l latch) &key &allow-other-keys)
   '((Q . 0) (QBAR . 1)))
+
+(defmethod reset((l latch))
+  (setf (signal-value (outputs l)) #*01))
 
 (defclass sr-latch(latch)
   ()
@@ -53,8 +58,7 @@
       ((equal iv #*11) #*00))))
 
 (defclass d-latch(latch)
-  ((control :initform 1 :accessor control :initarg :control
-            :documentation "Control level"))
+  ()
   (:documentation "A D type latch"))
 
 (defmethod initialize-inputs((l sr-latch) &key &allow-other-keys)
@@ -67,9 +71,7 @@
       (if (zerop (aref iv 1)) #*01 #*10))))
 
 (defclass sr-master-slave(sr-latch)
-  ((control :initform 1 :reader control :initarg :control :type bit
-            :documentation "Control level")
-   (master-state :initform #*00 :type bit-vector)))
+  ((master-state :initform #*00 :type bit-vector)))
 
 (defmethod initialize-inputs((l sr-master-slave) &key &allow-other-keys)
   '(S R C))
@@ -82,48 +84,42 @@
         (setf ms (call-next-method))
         ms)))
 
-(defclass d-flip-flop(latch with-edge-detection)
-  ((control :type bit :initform 1
-            :initarg :control :initarg :edge :reader control
-            :documentation "Edge triggering control - if 1 +ve, if 0 -ve")))
+(defclass d-flip-flop(latch with-clk)
+  ())
 
 (defmethod initialize-inputs((flip-flop d-flip-flop)&key &allow-other-keys)
   '(CLK S R D))
 
 (defmethod calculate-output-signals((flip-flop d-flip-flop)
                                     &optional changed-inputs)
-  (declare (ignore changed-inputs))
-  (multiple-value-bind(iv changed) (input-signal-vector flip-flop)
+  (flet((ip(i) (signal-value (aref (inputs flip-flop) i))))
     (case
-        (cond ((= 1 (aref iv 1)) 1)
-              ((= 1 (aref iv 2)) 0)
-              ((and (= 1 (aref changed 0)) ;clk edge
-                    (= (aref iv 0) (control flip-flop)))
-               (aref iv 3)))
+        (cond ((= 1 (ip 1)) 1)
+              ((= 1 (ip 2)) 0)
+              ((clk-edge-p flip-flop changed-inputs) ;clk edge
+               (ip 3)))
       (0 #*01)
       (1 #*10))))
 
-(defclass jk-flip-flop(latch with-edge-detection)
-  ((control :initform 1 :initarg :control :initarg :edge :reader control
-            :documentation "Edge triggering control - if 1 +ve, if 0 -ve")))
+(defclass jk-flip-flop(latch with-clk)
+  ())
 
 (defmethod initialize-inputs((flip-flop jk-flip-flop)&key &allow-other-keys)
   '(CLK S R J K))
 
 (defmethod calculate-output-signals((flip-flop jk-flip-flop)
                                     &optional changed-inputs)
-  (declare (ignore changed-inputs))
-  (multiple-value-bind(iv changed) (input-signal-vector flip-flop)
-
+  (flet((ip(i) (signal-value (aref (inputs flip-flop) i))))
     (case
-        (cond ((= 1 (aref iv 1)) 1) ; set
-              ((= 1 (aref iv 2)) 0) ; reset
-              ((= 0 (aref changed 0))) ; not clk edge - finished
-              ((= (aref iv 3) (aref iv 4)) ; J=K
-               (when (= (aref iv 3) 1)
-                 (bit-not (signal-value (outputs flip-flop)))))
-              ((= (aref iv 3) 1) 1) ; J=1
-              (0)) ; K=1
+        (cond ((= 1 (ip 1)) 1) ; set
+              ((= 1 (ip 2)) 0) ; reset
+              ((clk-edge-p flip-flop changed-inputs)
+               (let ((ip3 (ip 3)))
+                 (cond ((= ip3 (ip 4))
+                        (when (= ip3 1)
+                          (bit-not (signal-value (outputs flip-flop)))))
+                       ((= ip3 1) 1) ; J=1
+                       (0))))) ; K=1
       (0 #*01)
       (1 #*10))))
 

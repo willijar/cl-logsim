@@ -60,16 +60,6 @@
       (continue() :report "Replace previous definition"))
     (setf (gethash name *entities*) entity)))
 
-(defmethod reset((entities hash-table))
-  (maphash #'(lambda(k e)
-               (declare (ignore k))
-               (when (typep e 'source) (reset e)))
-           entities)
-  (maphash #'(lambda(k e)
-                (declare (ignore k))
-                (unless (typep e 'source) (reset e)))
-           entities))
-
 (defclass connection()
   ((entity :type entity :initarg :entity :reader entity
            :documentation "Entity with this connection")
@@ -254,9 +244,8 @@
 
 (defclass with-clk(with-inputs)
   ((control :initform 1 :type bit :initarg :control
-            :initarg :edge
+            :initarg :edge :reader control
             :documentation "Clock edge transition control - +ve if 1")
-   (last-clk :type bit :documentation "Last read clock value")
    (clk-input :type input :reader clk-input
               :documentation "The clock input connection")))
 
@@ -267,28 +256,12 @@
            (or (find clk-input (inputs entity) :key 'name)
                (error "~A is not a valid clock for ~A" clk-input entity)))
           (input clk-input)
-          (number (aref (inputs entity) clk-input))))
-  (setf (slot-value entity 'last-clk) (signal-value (clk-input entity))))
+          (number (aref (inputs entity) clk-input)))))
 
-(defun clock-edge-p(entity)
-  (let ((clk (signal-value (clk-input entity))))
-    (with-slots(last-clk control) entity
-      (prog1
-          (and (/= clk last-clk) (= clk control))
-        (setf last-clk clk)))))
-
-(defclass with-edge-detection()
-  ((input-signal-vector :type bit-vector))
-  (:documentation "A mixin to detect input signal edges"))
-
-(defun input-signal-vector(entity)
-  "Return 2 vectors - the input signal vector and a vector of changed inputs"
-  (let ((new (signal-value (inputs entity))))
-    (with-slots((old input-signal-vector)) entity
-      (unless (slot-boundp entity 'input-signal-vector)
-        (setf old new))
-      (let ((changed (bit-xor new old)))
-        (values (setf old new) changed)))))
+(defun clk-edge-p(entity changed-inputs)
+  (let ((clk (clk-input entity)))
+    (and (= (signal-value clk) (control entity))
+         (member clk changed-inputs))))
 
 (defun load-example(name &key (reset t))
   (when reset
