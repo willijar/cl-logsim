@@ -155,11 +155,11 @@
       (let ((row (row state)))
       ;; we check for state change before setting output
       ;; since calculate-output-signals is atomic
-      (when (clk-edge-p fsm changed-inputs)
-        (unless (equal (setf (state fsm) (next-state fsm input-vector row))
+        (when (clk-edge-p fsm changed-inputs)
+          (unless (equal (setf (state fsm) (next-state fsm input-vector row))
                    state)
-          (setf row (row (state fsm)))))
-      (concatenate 'bit-vector state
+            (setf row (row (state fsm)))))
+      (concatenate 'bit-vector (state fsm)
                    (output-vector fsm input-vector row))))))
 
 (defclass mealy-model(fsm)
@@ -177,33 +177,6 @@
            (find input-vector (rest entry) :test #'equal :key #'car)))
       (when transition (return-from output-vector (cdr transition))))))
 
-;; (defmethod state-table :around ((fsm fsm))
-;;   (let ((sn (length (state fsm))))
-;;   (cons
-;;    (list (mapcar #'name (subseq (outputs fsm) sn))
-;;          (map 'list #'name (subseq (inputs fsm) 1))
-;;          (mapcar #'name (subseq (outputs fsm) sn))
-;;          (map 'list #'name (subseq (outputs fsm) 0 sn)))
-;;    (call-next-method))))
-
-;; (defmethod state-table((fsm mealy-model))
-;;   (mapcan
-;;     #'(lambda(state-row)
-;;         (let ((initial-state (coerce (car state-row) 'list)))
-;;           (mapcan
-;;            #'(lambda(entry)
-;;                (let ((next-state (coerce (car entry) 'list)))
-;;                  (mapcar
-;;                   #'(lambda(transition)
-;;                       (list
-;;                        initial-state
-;;                        (coerce (car transition) 'list)
-;;                        next-state
-;;                        (coerce (cdr transition) 'list)))
-;;                   (cdr entry))))
-;;            (rest state-row))))
-;;     (state-data fsm)))
-
 (defclass moore-model(fsm)
   ()
   (:documentation "An FSM based on the Moore model"))
@@ -218,25 +191,6 @@
   (declare (ignore input-vector))
   (first state-data-row))
 
-;; (defmethod state-table((fsm moore-model))
-;;   (mapcan
-;;     #'(lambda(state-row)
-;;         (let ((initial-state (coerce (car state-row) 'list))
-;;               (output (coerce (second state-row) 'list)))
-;;           (mapcan
-;;            #'(lambda(entry)
-;;                (let ((next-state (coerce (car entry) 'list)))
-;;                  (mapcar
-;;                   #'(lambda(transition)
-;;                       (list
-;;                        initial-state
-;;                        (coerce transition 'list)
-;;                        next-state
-;;                        output))
-;;                   (cdr entry))))
-;;            (cddr state-row))))
-;;     (state-data fsm)))
-
 (defmethod write-state-diagram((entity mealy-model) (format (eql :dot))
                                &optional (stream *standard-output*))
   (write-line "digraph state_diagram {
@@ -250,12 +204,14 @@ node [shape=circle];" stream)
                       (rest entry)))))
   (write-line "}" stream))
 
-(defmethod write-state-diagram((entity moore-model) (format (eql :dot))  &optional (stream *standard-output*))
+(defmethod write-state-diagram((entity moore-model) (format (eql :dot))
+                               &optional (stream *standard-output*))
   (write-line "digraph state_diagram {
 rankdir=LR;
 node [shape=circle];" stream)
   (dolist(row (state-data entity))
-    (format stream "~/bv/ [label=\"~:*~/bv//~/bv/\"];~%" (first row) (second row)))
+    (format stream "~/bv/ [label=\"~:*~/bv//~/bv/\"];~%"
+            (first row) (second row)))
   (dolist(row (state-data entity))
     (dolist(entry (cddr row))
       (format stream "~/bv/ -> ~/bv/ [label=\"~{~/bv/~^/~}\"];~%"

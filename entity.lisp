@@ -34,7 +34,7 @@
 
 (defconstant high 1 "High value boolean")
 (defconstant low 0 "High value boolean")
-(defvar *default-delay* 0.02)
+(defvar *default-delay* 0.05)
 
 (defclass entity()
   ((lastid :allocation :class :initform 0)
@@ -146,13 +146,13 @@
   (:documentation "A connector (an alias for an input or output)"))
 
 (defmethod signal-value((c connector))
-  (if (connection c) (signal-value (connection c)) 0))
+  (if (connection c)
+      (signal-value (connection c))
+      (slot-value c 'signal-value)))
 
-(defmethod (setf connections)(value (c connector))
-  (setf (connections (connection c)) value))
-
-(defmethod connections((c connector))
-  (connections (connection c)))
+(defmethod (setf signal-value)(v (c connector))
+  (declare (ignore v))
+  (error "Attempt to set a signal value of ~A" c))
 
 (defgeneric calculate-output-signals(entity &optional changed-inputs)
   (:documentation "Calculate and return new output signal vector

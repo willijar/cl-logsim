@@ -61,7 +61,7 @@
   (let ((q  (event-queue simulator)))
     (while (not (empty-p q)) (dequeue q))))
 
-(defmethod start(simulator &key granularity (stop 100) &allow-other-keys)
+(defmethod start(simulator &key granularity (stop 100) step &allow-other-keys)
   "Execute the simulator returning the running
 thread. granularity is the number of event to dispatch before
 yielding the thread (default 10000). If granularity is nil all events
@@ -77,6 +77,7 @@ are dispatched in current thread"
              :for event = (dequeue q)
              :do (progn
                  (setf (simulation-time simulator) (car event))
+                 (when step (funcall step))
                  (funcall (cdr event)))
              :when (and granularity
                       (= (setf c (mod (1+ c) granularity)) 0))
@@ -96,5 +97,5 @@ are dispatched in current thread"
 (eval-when(:load-toplevel :execute)
   (unless *simulator* (setf *simulator* (make-instance 'simulator))))
 
-(defun start-simulation() (start *simulator*))
+(defun start-simulation(&key (stop 100) step) (start *simulator* :stop stop :step step))
 (defun stop-simulation() (stop *simulator*))
