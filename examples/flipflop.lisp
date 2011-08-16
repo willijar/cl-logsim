@@ -7,6 +7,7 @@
 
 (make-instance 'source :name 'reset :outputs '(R)
                :sequence '((0.5 . 1) (1 . 0)))
+
 (make-instance 'trace-monitor :name 'trace)
 (make-clock :name 'CLK)
 

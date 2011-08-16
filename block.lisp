@@ -57,20 +57,8 @@
     (function (funcall definition args))))
 
 (defmethod inputs-changed((b logic-block) &optional changed-inputs)
-  (let ((to-alert (apply #'append (map 'list #'connections changed-inputs))))
-    (while to-alert
-      (let ((changed-inputs (list (first to-alert)))
-            (entity (entity (first to-alert))))
-        (setf to-alert
-              (mapcan
-               #'(lambda(input)
-                   (if (eql (entity input) entity)
-                       (progn
-                         (push input changed-inputs)
-                         nil)
-                       (list input)))
-               (rest to-alert)))
-        (inputs-changed entity changed-inputs)))))
+  (inputs-changed :all
+                  (apply #'append (map 'list #'connections changed-inputs))))
 
 (defvar *env* (make-hash-table)
   "Name space environment for logic block construction. Maps names to either

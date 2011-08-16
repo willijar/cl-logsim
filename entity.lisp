@@ -158,12 +158,33 @@
   (:documentation "Calculate and return new output signal vector
   from (current) inputs. if nil do not change outputs"))
 
+(defgeneric delay(entity)
+  (:documentation "Gate delay for entity")
+  (:method(entity) 0))
+
 (defclass with-delay(with-outputs)
   ((delay :initarg :delay
           :type float :initform *default-delay* :accessor delay
           :documentation "Gate delay"))
   (:documentation "An entity with a fixed delay between inputs
   changing and outputs being updated"))
+
+(defmethod inputs-changed((fn (eql :all)) &optional to-alert)
+  "Given a list of inputs to alert that their signals have changed -
+collate them and notify the entities."
+  (while to-alert
+      (let ((changed-inputs (list (first to-alert)))
+            (entity (entity (first to-alert))))
+        (setf to-alert
+              (mapcan
+               #'(lambda(input)
+                   (if (eql (entity input) entity)
+                           (progn
+                             (push input changed-inputs)
+                             nil)
+                           (list input)))
+               (rest to-alert)))
+        (inputs-changed entity changed-inputs))))
 
 (defgeneric change-outputs(opvec entity)
   (:documentation "Change the outputs of entity to op informing all
@@ -180,19 +201,7 @@
                                 (connections output)))
                           old-signals new-signals outputs))))
         (setf (signal-value outputs) new-signals)
-        (while to-alert
-          (let ((changed-inputs (list (first to-alert)))
-                (entity (entity (first to-alert))))
-            (setf to-alert
-                  (mapcan
-                   #'(lambda(input)
-                       (if (eql (entity input) entity)
-                           (progn
-                             (push input changed-inputs)
-                             nil)
-                           (list input)))
-                   (rest to-alert)))
-            (inputs-changed entity changed-inputs))))))
+        (inputs-changed :all to-alert))))
   (:method(new-signals (entity with-outputs))
     (change-outputs new-signals (outputs entity))))
 
@@ -200,15 +209,10 @@
   (:documentation "Inform an entity that its inputs have changed -
   optionally notifying which inputs")
   (:method((entity with-outputs) &optional changed-inputs)
-    (change-outputs (calculate-output-signals entity changed-inputs)
-                    entity))
-  (:method((entity with-delay) &optional changed-inputs)
-    (if (zerop (delay entity))
-        (call-next-method)
         (schedule
          (delay entity)
          (let ((opvec (calculate-output-signals entity changed-inputs)))
-           #'(lambda() (change-outputs opvec entity)))))))
+           #'(lambda() (change-outputs opvec entity))))))
 
 (defgeneric connect(output input)
   (:documentation "Connect an output to an input")

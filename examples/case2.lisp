@@ -9,7 +9,7 @@
 (make-instance 'trace-monitor :name 'trace)
 (make-clock :name 'CLK)
 
-(connect '( #{fsm X1 } #{fsm X0 }
+(connect '(#{CLK CLK } #{fsm X1 } #{fsm X0 } #{signals D } #{signals S }
            #{fsm dormant } #{fsm hit } #{fsm miss })
          #{trace })
 
