@@ -234,66 +234,87 @@ node [shape=circle];" stream)
 ;; - one for setting state and one for asserting outputs
 
 (defclass asm-model(fsm)
-  ((compiled-state-data :reader compiled-state-data))
+  ((compiled-state-data :reader compiled-state-data)
+   (input-mask :type bit-vector :documentation "Input inversion mask")
+   (output-mask :type bit-vector :documentation "Output inversion mask"))
   (:documentation "An Algorithmic State Machine Model"))
 
-;; (defun compile-asm-expression(asm expr)
-;;   "Return the two function forms - one for next state and one for output vector"
-;;   (let* ((ipnames (mapcar #'name (subseq (inputs asm) 1)))
-;;          (opnames (mapcar #'name (subseq (outputs asm) (length (state asm))))))
-;;   (labels ((ip(ip) (or (position ip ipnames)
-;;                      (error "Input ~A not defined." ip)))
-;;            (op(op) (or (position op opnames)
-;;                        (error "Output ~A not defined." op)))
-;;            (doexpr(expr state-p)
-;;              (typecase expr
-;;                (bit-vector (when state-p (list expr)))
-;;                (symbol (unless state-p
-;;                          `((setf (aref output-vector ,(op exor)) 1))))
-;;                (list
-;;                 (if (eql (first expr) '?)
-;;                     `((if (= 1 (bit input-vector ,(ip (second expr))))
-;;                           ,@(doexpr (third expr) state-p)
-;;                           ,@(doexpr (fourth expr) state-p)))
-;;                     ,@(mapcar #'(lambda(expr) (doexpr expr state-p)) expr))))))
-;;     (values
-;;      `(lambda(input-vector)
-;;         (let ((output-vector
-;;               (make-array ,(length opnames)
-;;                           :element-type 'bit
-;;                           :initial-contents
-;;                           ,(mapcar
-;;                             #'(lambda(op)
-;;                                 (if (member op (first expr)) 1 0))
-;;                             opnames))))
-;;           ,@(doexpr (third expr) nil)
-;;           output-vector))
-;;      `(lambda(input-vector) ,@(doexpr (third expr) t))))))
+(defun bitnot(s) (- 1 s)) ;; lognot uses 2s complement - not what we want
 
-;; (defmethod initialize-instance :after ((asm asm) &key &allow-other-keys)
-;;   (labels ((assert-low(c)
-;;              (let ((n (symbol-name (name c))))
-;;                (if (= (search "(L)"  :from-end t)
-;;                       (length c)) 1 0)))
-;;            (mask(c)
-;;              (make-array (length c) :element-type 'bit
-;;                          :initial-contents (mapcar #'assert-low c))))
-;;   (setf (slot-value asm 'state-data)
-;;         (mapcar #'(lambda(row)
-;;                     (cons (car row)
-;;                     (multiple-value-list (compile-asm-expression asm (rest row)))))
-;;                 (state-data asm))
-;;         (slot-value asm 'output-mask) (mask (subseq (outputs asm)
-;;                                                     (length (state asm))))
-;;         (slot-value asm 'input-mask) (mask (subseq (inputs asm) 1)))))
+(defun compile-asm-expression(asm expr)
+  "Return the two function forms - one for next state and one for output vector"
+  (let* ((ipnames (map 'list #'name (subseq (inputs asm) 1)))
+         (opnames (map 'list #'name (subseq (outputs asm)
+                                            (length (state asm))))))
+  (labels ((ip(ip) (or (position ip ipnames)
+                     (error "Input ~A not defined." ip)))
+           (op(op) (or (position op opnames)
+                       (error "Output ~A not defined." op)))
+           (logic(expr) ; returns expansion of a logic test
+             (typecase expr
+               (symbol `(bit input-vector ,(ip expr)))
+               (list
+                (cons
+                    (ecase (first expr)
+                      (and 'logand)
+                      (or 'logior)
+                      (xor 'logxor)
+                      (not 'bitnot))
+                    (mapcar #'logic (rest expr))))))
+           (doexpr(expr state-p)
+             (typecase expr
+               (bit-vector (when state-p expr))
+               (symbol (unless state-p
+                         `(setf (bit output-vector ,(op expr)) 1)))
+               (list
+                (if (eql (first expr) '?)
+                    `(if (= 1 ,(logic (second expr)))
+                          ,(doexpr (third expr) state-p)
+                          ,(doexpr (fourth expr) state-p))
+                    (if state-p
+                        (second expr)
+                        `(setf ,@(mapcan
+                                  #'(lambda(s) `((bit output-vector ,(op s)) 1))
+                                  (first expr)))))))))
+    (values
+     `(lambda(input-vector)
+        (let ((output-vector
+               (make-array ,(length opnames)
+                           :element-type 'bit
+                           :initial-contents
+                           ,(map 'bit-vector
+                             #'(lambda(op)
+                                 (if (member op (first expr)) 1 0))
+                             opnames))))
+          ,(doexpr (second expr) nil)
+          output-vector))
+     `(lambda(input-vector) ,(doexpr (second expr) t))))))
 
-;; (defmethod next-state((asm asm) input-vector row)
-;;   (funcall (third row) (bit-xor input-vector (slot-value asm 'input-mask))))
+(defmethod initialize-instance :after ((asm asm-model) &key &allow-other-keys)
+  (labels ((assert-low(c)
+             (let ((n (symbol-name (name c))))
+               (if (eql (search "(L)" n  :from-end t)
+                      (length n)) 1 0)))
+           (mask(c) (map 'bit-vector #'assert-low c)))
+  (setf (slot-value asm 'state-data)
+        (mapcar #'(lambda(row)
+                    (cons (car row)
+                          (multiple-value-list
+                           (compile-asm-expression asm (rest row)))))
+                (state-data asm))
+        (slot-value asm 'output-mask)
+        (mask (subseq (outputs asm) (length (state asm))))
+        (slot-value asm 'input-mask) (mask (subseq (inputs asm) 1)))))
 
-;; (defmethod output-vector((asm asm) input-vector row)
-;;   (bit-xor
-;;    (funcall (second row) (bit-xor input-vector (slot-value asm 'input-mask)))
-;;    (slot-value asm 'output-mask)))
+(defmethod next-state((asm asm-model) input-vector row)
+  (funcall (eval (second row))
+           (bit-xor input-vector (slot-value asm 'input-mask))))
+
+(defmethod output-vector((asm asm-model) input-vector row)
+  (bit-xor
+   (funcall (eval (first row))
+            (bit-xor input-vector (slot-value asm 'input-mask)))
+   (slot-value asm 'output-mask)))
 
 (defun cl-user::expr(os expr &rest args)
   "Print out a an expression as UTF-8 text"

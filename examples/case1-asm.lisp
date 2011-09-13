@@ -11,5 +11,6 @@
    (#*111 () (? (and P Q) #*110 (? (or P Q) #*000 #*001)))
    (#*110 () (? (and P (not Q)) ((Y) #*000) (? Q #*000 #*001)))))
 
-;(load-example "case-1" :reset nil)
+
+(load-example "case1" :reset nil)
 

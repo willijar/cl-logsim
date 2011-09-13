@@ -28,9 +28,7 @@
     :components
     ((:file "defpackage")
      (:file "common" :depends-on ("defpackage"))
-     (:file "compatibility" :depends-on ("defpackage"))
-     (:file "simulator" :depends-on
-            ("defpackage" "common" "compatibility"))
+     (:file "simulator" :depends-on ("defpackage" "common"))
      (:file "entity" :depends-on ("simulator"))
      (:file "sources" :depends-on ("entity"))
      (:file "logic" :depends-on ("entity"))

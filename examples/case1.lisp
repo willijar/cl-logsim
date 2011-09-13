@@ -1,26 +1,27 @@
+;; (make-instance
+;;   'source
+;;   :name 'PQ
+;;   :outputs '(P Q)
+;;   :sequence '((2 . #*00) (1 . #*10) (1 . #*11) (1 . #*10) (1 . #*00)))
+
 (make-instance
  'source
  :name 'PQ
  :outputs '(P Q)
- :sequence ((2.5 . #*00) (1 . #*10) (1 . #*11) (1 . #*10) (1 . #*00)))
-
-(make-instance
- 'source
- :name 'PQb
- :outputs '(P Q)
- :sequence ((2.5 . #*00) (1 . #*01) (1 . #*11) (1 . #*10) (1 . #*00)))
+ :sequence '((1 . #*11) (1 . #*01) (3 . #*00) (1 . #*11) (1 . #*10)
+            (2 . #*00) (1 . #*01) (1 . #*11) (1 . #*10) (1 . #*01) (2 . #*00)))
 
 (make-instance 'trace-monitor :name 'trace)
 (make-clock)
 
-(connect '(#{CLK }       #{PQ P }    #{PQ Q })
+(connect '(#{CLK CLK }       #{PQ P }    #{PQ Q })
          '(#{model CLK } #{model P } #{model Q }))
 
-(connect '(#{CLK } #{model X2 } #{model X1 } #{model X0 }
-           #{P } #{Q } #{model Y })
+(connect '(#{CLK CLK } #{model X2 } #{model X1 } #{model X0 }
+           #{PQ P } #{PQ Q } #{model Y })
          #{trace })
 
-(schedule 8 #'stop-simulation)
-;(start-simulation)
+(schedule (duration #{PQ }) #'stop-simulation)
+(start-simulation)
 
 

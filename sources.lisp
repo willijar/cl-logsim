@@ -41,6 +41,10 @@ values. For non-periodic signals the last time period is ignored.")
                    :documentation "Current position in sequence")
    (periodic :initarg :periodic :type boolean :initform nil :reader periodic)))
 
+(defun duration(source)
+  (unless (periodic source)
+    (reduce #'+ (signal-sequence source) :key #'car)))
+
 (defmethod initialize-instance :after ((s source)
                                        &key sequence &allow-other-keys)
   (let ((n (length (outputs s))))
