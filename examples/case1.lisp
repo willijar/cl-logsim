@@ -22,6 +22,4 @@
          #{trace })
 
 (schedule (duration #{PQ }) #'stop-simulation)
-(start-simulation)
-
 

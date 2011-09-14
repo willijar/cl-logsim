@@ -180,7 +180,9 @@ variables will be mapped onto inputs on the block. "
     (let ((gate
            (make-instance
             'logic-block
-            :name name :inputs inputs-names :outputs outputs-names
+            :name name
+            :inputs (reverse inputs-names)
+            :outputs (reverse outputs-names)
             :definition expr)))
       ;; connect up the inputs and outputs to components
       (maphash
@@ -216,3 +218,20 @@ variables will be mapped onto inputs on the block. "
               entity)))))
 
 (set-dispatch-macro-character #\# #\{ #'con-reader)
+
+(defmethod truth-table(entity)
+  (reset *simulator*)
+  (values
+   (let ((n (length (inputs entity))))
+    (map 'list
+         #'(lambda(i)
+             (let ((iv (integer-to-bit-vector i n)))
+               (setf (signal-value (inputs entity)) iv)
+               (start *simulator* :quiet t)
+               (cons iv (signal-value (outputs entity)))))
+         (integer-sequence (ash 1 n))))
+   (cons (map 'vector #'name (inputs entity))
+         (map 'vector #'name (outputs entity)))))
+
+(defmethod truth-table((expr list))
+  (truth-table (build-logic-block (gensym "truth-table") expr)))

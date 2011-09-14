@@ -57,33 +57,50 @@
 (defmethod calculate-output-signals ((gate logic-function-gate)
                                      &optional changed-inputs)
   (declare (ignore changed-inputs))
-  (make-array 1
-              :element-type 'bit
-              :initial-element
-              (reduce (slot-value gate 'logic-function)
-                      (bit-xor (signal-value (inputs gate))
-                               (inverted-inputs gate)))))
+  (reduce (slot-value gate 'logic-function)
+          (map 'list
+               #'(lambda(s) (integer-to-bit-vector s 1))
+               (bit-xor (signal-value (inputs gate))
+                        (inverted-inputs gate)))))
+
+  ;; (make-array 1
+  ;;             :element-type 'bit
+  ;;             :initial-element
+  ;;             (reduce (slot-value gate 'logic-function)
+  ;;                     (bit-xor (signal-value (inputs gate))
+  ;;                              (inverted-inputs gate)))))
 
 (defclass and-gate(logic-function-gate)
-  ((logic-function :initform #'logand :allocation :class)))
+  ((logic-function :initform #'bit-and :allocation :class)))
 
 (defclass or-gate(logic-function-gate)
-  ((logic-function :initform #'logior :allocation :class)))
+  ((logic-function :initform #'bit-ior :allocation :class)))
 
 (defclass xor-gate(logic-function-gate)
-  ((logic-function :initform #'logxor :allocation :class)))
+  ((logic-function :initform #'bit-xor :allocation :class)))
 
-(defclass nand-gate(logic-function-gate)
-  ((logic-function :initform #'lognand :allocation :class)))
+(defclass inverted-gate(logic-function-gate)
+  ())
 
-(defclass nor-gate(logic-function-gate)
-  ((logic-function :initform #'lognor :allocation :class)))
+(defmethod  calculate-output-signals((gate inverted-gate) &optional changed-inputs)
+  (declare (ignore changed-inputs))
+  (bit-not (call-next-method)))
 
-(defclass not-gate(logic-function-gate)
+(defclass nand-gate(and-gate inverted-gate )
+  ())
+
+(defclass nor-gate( or-gate inverted-gate)
+  ())
+
+(defclass not-gate(logic)
    ())
+
+(defmethod initialize-inputs((entity not-gate) &key &allow-other-keys)
+  '(IP))
 
 (defmethod calculate-output-signals((gate not-gate) &optional changed-inputs)
   (declare (ignore changed-inputs))
+  (break)
   (bit-not (signal-value (inputs gate))))
 
 (defclass truth-table-gate(logic)

@@ -62,14 +62,13 @@
   (let ((q  (event-queue simulator)))
     (while (not (empty-p q)) (dequeue q))))
 
-(defmethod start(simulator &key (stop 100) step &allow-other-keys)
+(defmethod start(simulator &key (stop 100) step quiet &allow-other-keys)
   "Execute the simulator returning the running
 thread. granularity is the number of event to dispatch before
 yielding the thread (default 10000). If granularity is nil all events
 are dispatched in current thread"
   (setf (halted simulator) nil)
   (loop
-     :with c = 1
      :with q =  (slot-value simulator 'event-queue)
      :while (not (or (empty-p q)
                      (halted simulator)
@@ -79,7 +78,8 @@ are dispatched in current thread"
            (setf (simulation-time simulator) (caar event))
            (when step (funcall step))
            (funcall (cdr event))))
-  (format t "~%-- Simulation halted at ~,4f~%" (simulation-time simulator))
+  (unless quiet
+    (format t "~%-- Simulation halted at ~,4f~%" (simulation-time simulator)))
   (setf (halted simulator) t))
 
 (eval-when(:load-toplevel :execute)
