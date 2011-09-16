@@ -220,7 +220,7 @@ variables will be mapped onto inputs on the block. "
 (set-dispatch-macro-character #\# #\{ #'con-reader)
 
 (defmethod truth-table(entity)
-  (reset *simulator*)
+  (start *simulator* :quiet t)
   (values
    (let ((n (length (inputs entity))))
     (map 'list
