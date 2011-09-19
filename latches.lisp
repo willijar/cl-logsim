@@ -117,7 +117,8 @@
                (let ((ip3 (ip 3)))
                  (cond ((= ip3 (ip 4))
                         (when (= ip3 1)
-                          (bit-not (signal-value (outputs flip-flop)))))
+                          (return-from calculate-output-signals
+                            (bit-not (signal-value (outputs flip-flop))))))
                        ((= ip3 1) 1) ; J=1
                        (0))))) ; K=1
       (0 #*01)

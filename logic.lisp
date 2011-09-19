@@ -63,13 +63,6 @@
                (bit-xor (signal-value (inputs gate))
                         (inverted-inputs gate)))))
 
-  ;; (make-array 1
-  ;;             :element-type 'bit
-  ;;             :initial-element
-  ;;             (reduce (slot-value gate 'logic-function)
-  ;;                     (bit-xor (signal-value (inputs gate))
-  ;;                              (inverted-inputs gate)))))
-
 (defclass and-gate(logic-function-gate)
   ((logic-function :initform #'bit-and :allocation :class)))
 
@@ -100,7 +93,6 @@
 
 (defmethod calculate-output-signals((gate not-gate) &optional changed-inputs)
   (declare (ignore changed-inputs))
-  (break)
   (bit-not (signal-value (inputs gate))))
 
 (defclass truth-table-gate(logic)
