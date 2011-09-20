@@ -267,7 +267,7 @@ collate them and notify the entities."
     (and (= (signal-value clk) (control entity))
          (member clk changed-inputs))))
 
-(defun load-example(name &key (reset t))
+(defun load-example(name &key (reset t) (quiet t))
   (when reset
     (clrhash *entities*)
     (reset *simulator*))
@@ -275,4 +275,4 @@ collate them and notify the entities."
          (make-pathname :name name :type "lisp")
          #.(asdf:system-relative-pathname :logsim "/examples/"))
         :verbose nil :print nil)
-  (format *trace-output* "~%-- Example ~S loaded~%" name))
+  (unless quiet (format *trace-output* "~%-- Example ~S loaded~%" name)))
