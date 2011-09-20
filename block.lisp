@@ -67,9 +67,9 @@ need to be connected to that symbol once it is resolved.")
 
 (defun resolve-output(output name)
   (let ((r (gethash name *env*)))
-             (when (typep r 'output) (error "Duplicate output name ~A" name))
-             (map 'nil #'(lambda(input) (connect output input)) r)
-             (setf (gethash name *env*) output)))
+    (when (typep r 'output) (error "Duplicate output name ~A" name))
+    (map 'nil #'(lambda(input) (connect output input)) r)
+    (setf (gethash name *env*) output)))
 
 (defun resolve-input(input expr)
   "Returns list of gates created"

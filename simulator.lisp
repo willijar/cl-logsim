@@ -62,7 +62,8 @@
   (let ((q  (event-queue simulator)))
     (while (not (empty-p q)) (dequeue q))))
 
-(defmethod start(simulator &key (stop 100) step quiet &allow-other-keys)
+(defmethod start(simulator &key (stop (+ (simulation-time simulator) 100))
+                 step quiet &allow-other-keys)
   "Execute the simulator returning the running
 thread. granularity is the number of event to dispatch before
 yielding the thread (default 10000). If granularity is nil all events
