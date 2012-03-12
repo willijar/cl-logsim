@@ -271,8 +271,9 @@ collate them and notify the entities."
   (when reset
     (clrhash *entities*)
     (reset *simulator*))
-  (load (merge-pathnames
-         (make-pathname :name name :type "lisp")
-         #.(asdf:system-relative-pathname :logsim "/examples/"))
+  (load (if (pathnamep name) name
+            (merge-pathnames
+             (make-pathname :name name :type "lisp")
+             #.(asdf:system-relative-pathname :logsim "/examples/")))
         :verbose nil :print nil)
   (unless quiet (format *trace-output* "~%-- Example ~S loaded~%" name)))

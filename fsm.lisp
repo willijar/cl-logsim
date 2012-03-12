@@ -234,7 +234,7 @@ node [shape=circle];" stream)
 ;; - one for setting state and one for asserting outputs
 
 (defclass asm-model(fsm)
-  ((compiled-state-data :reader compiled-state-data)
+  ((initial-state-data :reader initial-state-data :initarg :state-data)
    (input-mask :type bit-vector :documentation "Input inversion mask")
    (output-mask :type bit-vector :documentation "Output inversion mask"))
   (:documentation "An Algorithmic State Machine Model"))
@@ -381,12 +381,12 @@ concentrate=true;
 node[height=0.25];
 Start [shape=none,label=\"Start\"];" stream)
   ;; write out state node data first
-  (dolist(row (state-data entity))
+  (dolist(row (initial-state-data entity))
     (format stream "~/bv/ [shape=record,label=\"~:*~/bv/|~@[~{~A~^\\n~}~]\"];~%"
             (first row) (second row)))
   ;; connect start to initial state
   (format stream "Start -> ~/bv/ [tailport=s,headport=n];~%" (initial-state-vector entity))
   ;; now write out the state data
-  (dolist(row (state-data entity))
+  (dolist(row (initial-state-data entity))
     (expand-expr (third row) (first row)))
   (write-line "}" stream))))
