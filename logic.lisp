@@ -72,6 +72,17 @@
 (defclass xor-gate(logic-function-gate)
   ((logic-function :initform #'bit-xor :allocation :class)))
 
+
+(defclass identity-gate(logic)
+   ())
+
+(defmethod initialize-inputs((entity identity-gate) &key &allow-other-keys)
+  '(IP))
+
+(defmethod calculate-output-signals((gate identity-gate) &optional changed-inputs)
+  (declare (ignore changed-inputs))
+  (signal-value (inputs gate)))
+
 (defclass inverted-gate(logic-function-gate)
   ())
 
@@ -79,21 +90,20 @@
   (declare (ignore changed-inputs))
   (bit-not (call-next-method)))
 
-(defclass nand-gate(and-gate inverted-gate )
+
+(defclass nand-gate(and-gate inverted-gate)
   ())
 
 (defclass nor-gate( or-gate inverted-gate)
   ())
 
-(defclass not-gate(logic)
+(defclass not-gate( identity-gate)
    ())
 
-(defmethod initialize-inputs((entity not-gate) &key &allow-other-keys)
-  '(IP))
-
-(defmethod calculate-output-signals((gate not-gate) &optional changed-inputs)
+(defmethod  calculate-output-signals((gate not-gate) &optional changed-inputs)
   (declare (ignore changed-inputs))
-  (bit-not (signal-value (inputs gate))))
+  (bit-not (call-next-method)))
+
 
 (defclass truth-table-gate(logic)
   ((truth-table :type vector :reader truth-table))

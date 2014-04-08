@@ -22,4 +22,3 @@
          #{trace })
 
 (schedule (duration #{PQ }) #'stop-simulation)
-

@@ -274,6 +274,6 @@ collate them and notify the entities."
   (load (if (pathnamep name) name
             (merge-pathnames
              (make-pathname :name name :type "lisp")
-             #.(asdf:system-relative-pathname :logsim "/examples/")))
+             #.(asdf:system-relative-pathname :logsim "examples/")))
         :verbose nil :print nil)
   (unless quiet (format *trace-output* "~%-- Example ~S loaded~%" name)))

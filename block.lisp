@@ -95,7 +95,7 @@ need to be connected to that symbol once it is resolved.")
 
 (defun build-logic(expr)
   "Construct a logic block using gates - returns a list of new gates
-in topoligical order. "
+in topoligocal order. "
   (multiple-value-bind(type init-args args)
       (etypecase (car expr)
         (symbol (values (car expr) nil (cdr expr)))
@@ -108,11 +108,13 @@ in topoligical order. "
        (let ((gates (build-logic (second args))))
          (resolve-output (aref (outputs (first gates)) 0) (first args))
          gates))
-      (not
+      ((identity not)
        ;; not gate
        (unless (= (length args) 1)
          (error "Invalid Expression ~A 1 argument expected" expr))
-       (let ((gate (apply #'make-instance 'not-gate init-args)))
+       (let ((gate (apply #'make-instance
+                          (ecase type (identity 'identity-gate) (not 'not-gate))
+                          init-args)))
          (cons gate
                (resolve-input (aref (inputs gate) 0) (first args)))))
       ((or and nor nand xor)
@@ -157,12 +159,11 @@ in topoligical order. "
                   :when input :nconc (resolve-input input expr)
                   :when output :do (resolve-output output expr))))))))
 
-(defun build-logic-block(name expr)
+(defun build-logic-block(name expr &optional inputs-names)
   "Build a logic block with one output from expression. Undefined
 variables will be mapped onto inputs on the block. "
   (let* ((*env* (make-hash-table))
          outputs-names
-         inputs-names
          (gates
           (mapcan
            #'(lambda(expr)
@@ -174,14 +175,14 @@ variables will be mapped onto inputs on the block. "
            expr)))
     (maphash ;; collect list of unresolved inputs as input names
      #'(lambda(name v)
-         (when (and (listp v) (not (member name outputs-names))
-           (push name inputs-names))))
+         (when (and (listp v) (not (member name outputs-names)))
+           (pushnew name inputs-names)))
      *env*)
     (let ((gate
            (make-instance
             'logic-block
             :name name
-            :inputs (reverse inputs-names)
+            :inputs inputs-names
             :outputs (reverse outputs-names)
             :definition expr)))
       ;; connect up the inputs and outputs to components
